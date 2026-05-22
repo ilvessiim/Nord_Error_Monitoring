@@ -181,58 +181,82 @@ def main(date_arg=None):
         'Ootamatu reageering': 'Käsku ei antud'
     })
 
+    # Define overall health states
+    df['Üldine olek'] = df['Põhjus'].apply(lambda x: 'Normaalne töö' if x in ['Käsk täidetud', 'Käsku ei antud'] else x)
+
+    # Calculate overall episodes based on mapped 'Üldine olek' and time gaps
+    df['Time_dt'] = pd.to_datetime(df['Time'])
+    time_diffs = df['Time_dt'].diff().dt.total_seconds()
+    new_episode_overall = (df['Üldine olek'] != df['Üldine olek'].shift(1)) | (time_diffs > 30)
+    df['Episoodi ID Üldine'] = new_episode_overall.cumsum()
+
+    # Aggregate overall health episodes
+    overall_episodes_bounds = df.groupby('Episoodi ID Üldine')['Time_dt'].agg(['first', 'last'])
+    overall_episodes_df = pd.DataFrame({
+        'Episoodi ID': overall_episodes_bounds.index,
+        'Üldine olek': df.groupby('Episoodi ID Üldine')['Üldine olek'].first(),
+        'Algusaeg': overall_episodes_bounds['first'],
+        'Lõpuaeg': overall_episodes_bounds['last']
+    }).reset_index(drop=True)
+
+    # Calculate episode durations
+    overall_episodes_df['Kestvus (sekundit)'] = (overall_episodes_df['Lõpuaeg'] - overall_episodes_df['Algusaeg']).dt.total_seconds() + 25
+    overall_episodes_df['Kestvus (sekundit)'] = overall_episodes_df['Kestvus (sekundit)'].astype(int)
+    overall_episodes_df['Kestvus (minutit)'] = (overall_episodes_df['Kestvus (sekundit)'] / 60).round(2)
+    overall_episodes_df['Tund'] = overall_episodes_df['Algusaeg'].dt.hour
+    overall_episodes_df['Kuupäev'] = overall_episodes_df['Algusaeg'].dt.date
+
     # --- Generate Summary Statistics (only 4 core errors) ---
     print("Generating Summary Statistics...")
-    total_rows = len(df)
-
-    # Only the 4 core error categories
     error_categories = [
         'SOC liiga kõrge',
         'SOC liiga madal',
         'Võrgupiirang',
         'Viga - uurimist vajav'
     ]
-    error_counts = df['Põhjus'].value_counts().reindex(error_categories, fill_value=0)
-    total_errors = error_counts.sum()
-
-    # Percentages calculated from total error count only
-    error_pct = (error_counts / total_errors) * 100
+    
+    # Filter overall episodes for the 4 core error categories
+    error_episodes_df = overall_episodes_df[overall_episodes_df['Üldine olek'].isin(error_categories)]
+    error_counts = error_episodes_df['Üldine olek'].value_counts().reindex(error_categories, fill_value=0)
+    total_error_incidents = error_counts.sum()
+    error_pct = (error_counts / total_error_incidents) * 100 if total_error_incidents > 0 else 0
 
     summary_df = pd.DataFrame({
-        'Kogus (Ridade arv)': error_counts,
-        'Osakaal vigadest (%)': error_pct
+        'Juhtumite arv (episoodid)': error_counts,
+        'Osakaal vigadest (%)': error_pct.round(2)
     })
     summary_df.index.name = 'Probleem'
 
-    total_normal = total_rows - total_errors
+    total_incidents = len(overall_episodes_df)
+    total_normal_incidents = (overall_episodes_df['Üldine olek'] == 'Normaalne töö').sum()
+    
     stats_df = pd.DataFrame({
         'Näitaja': [
-            'Ridade koguarv',
-            'Toimib nagu peab (Normaalne töö)',
-            'Vigade koguarv (4 probleemi)',
-            'SOC liiga kõrge',
-            'SOC liiga madal',
-            'Võrgupiirang',
-            'Viga - uurimist vajav',
-            'Normaalne töö (%)',
-            'Vigade osakaal koguajast (%)',
+            'Juhtumite koguarv (episoodid)',
+            'Toimib nagu peab (Normaalne töö juhtumid)',
+            'Vigade koguarv (4 probleemi juhtumid)',
+            'SOC liiga kõrge juhtumid',
+            'SOC liiga madal juhtumid',
+            'Võrgupiirang juhtumid',
+            'Viga - uurimist vajav juhtumid',
+            'Normaalne töö osakaal juhtumitest (%)',
+            'Vigade osakaal juhtumitest (%)',
         ],
         'Väärtus': [
-            total_rows,
-            int(total_normal),
-            int(total_errors),
+            total_incidents,
+            int(total_normal_incidents),
+            int(total_error_incidents),
             int(error_counts['SOC liiga kõrge']),
             int(error_counts['SOC liiga madal']),
             int(error_counts['Võrgupiirang']),
             int(error_counts['Viga - uurimist vajav']),
-            round((total_normal / total_rows) * 100, 2),
-            round((total_errors / total_rows) * 100, 2),
+            round((total_normal_incidents / total_incidents) * 100, 2) if total_incidents > 0 else 0,
+            round((total_error_incidents / total_incidents) * 100, 2) if total_incidents > 0 else 0,
         ]
     })
 
-    # --- Generate Overall Health Distribution (all rows) ---
+    # --- Generate Overall Health Distribution (all episodes) ---
     print("Generating Overall Health Distribution...")
-    df['Üldine olek'] = df['Põhjus'].apply(lambda x: 'Normaalne töö' if x in ['Käsk täidetud', 'Käsku ei antud'] else x)
     overall_categories = [
         'Normaalne töö',
         'Võrgupiirang',
@@ -240,58 +264,43 @@ def main(date_arg=None):
         'SOC liiga madal',
         'Viga - uurimist vajav'
     ]
-    overall_counts = df['Üldine olek'].value_counts().reindex(overall_categories, fill_value=0)
-    overall_pct = (overall_counts / total_rows) * 100
+    overall_counts = overall_episodes_df['Üldine olek'].value_counts().reindex(overall_categories, fill_value=0)
+    overall_pct = (overall_counts / total_incidents) * 100 if total_incidents > 0 else 0
 
     overall_df = pd.DataFrame({
-        'Kogus (Ridade arv)': overall_counts,
-        'Osakaal koguajast (%)': overall_pct.round(2)
+        'Juhtumite arv (episoodid)': overall_counts,
+        'Osakaal juhtumitest (%)': overall_pct.round(2)
     })
     overall_df.index.name = 'Kategooria'
 
-    # Hourly overall health analysis
-    hourly_overall = df.groupby(['Tund', 'Üldine olek']).size().unstack(fill_value=0)
+    # Hourly overall health analysis (incidents starting in each hour)
+    hourly_overall = overall_episodes_df.groupby(['Tund', 'Üldine olek']).size().unstack(fill_value=0)
+    hourly_overall = hourly_overall.reindex(index=range(24), fill_value=0)
     hourly_overall = hourly_overall.reindex(columns=overall_categories, fill_value=0)
     hourly_overall_pct = hourly_overall.div(hourly_overall.sum(axis=1), axis=0) * 100
+    hourly_overall_pct = hourly_overall_pct.fillna(0)
 
     # --- Hourly Analysis (only 4 core errors) ---
     print("Generating Hourly Analysis...")
-    hourly_groups = df.groupby('Tund')
-
     hourly_df = pd.DataFrame(index=range(24))
     hourly_df.index.name = 'Tund'
 
-    hourly_df['SOC liiga kõrge'] = hourly_groups['Põhjus'].apply(
-        lambda s: (s == 'SOC liiga kõrge').sum()
-    )
-    hourly_df['SOC liiga madal'] = hourly_groups['Põhjus'].apply(
-        lambda s: (s == 'SOC liiga madal').sum()
-    )
-    hourly_df['Võrgupiirang'] = hourly_groups['Põhjus'].apply(
-        lambda s: (s == 'Võrgupiirang').sum()
-    )
-    hourly_df['Viga - uurimist vajav'] = hourly_groups['Põhjus'].apply(
-        lambda s: (s == 'Viga - uurimist vajav').sum()
-    )
-    hourly_df['Vigade koguarv tunnis'] = (
-        hourly_df['SOC liiga kõrge'] + hourly_df['SOC liiga madal'] +
-        hourly_df['Võrgupiirang'] + hourly_df['Viga - uurimist vajav']
-    )
+    for cat in error_categories:
+        cat_counts = error_episodes_df[error_episodes_df['Üldine olek'] == cat].groupby('Tund').size()
+        hourly_df[cat] = cat_counts.reindex(range(24), fill_value=0)
+        
+    hourly_df['Vigade koguarv tunnis'] = hourly_df[error_categories].sum(axis=1)
 
     # --- Generate Episode Statistics (only 4 core errors) ---
     print("Generating Episode Statistics...")
-    # Group by Episode ID to get one row per episode
-    episodes_df = df.groupby('Episoodi ID').first().reset_index()
-    error_episodes = episodes_df[episodes_df['Põhjus'].isin(error_categories)]
-    
     episode_stats = []
     for cat in error_categories:
-        cat_episodes = error_episodes[error_episodes['Põhjus'] == cat]
+        cat_episodes = error_episodes_df[error_episodes_df['Üldine olek'] == cat]
         num_incidents = len(cat_episodes)
         if num_incidents > 0:
-            total_sec = cat_episodes['Episoodi kestvus (sekundit)'].sum()
-            avg_sec = cat_episodes['Episoodi kestvus (sekundit)'].mean()
-            max_sec = cat_episodes['Episoodi kestvus (sekundit)'].max()
+            total_sec = cat_episodes['Kestvus (sekundit)'].sum()
+            avg_sec = cat_episodes['Kestvus (sekundit)'].mean()
+            max_sec = cat_episodes['Kestvus (sekundit)'].max()
         else:
             total_sec = 0
             avg_sec = 0
@@ -336,21 +345,25 @@ def main(date_arg=None):
     # --- Daily error breakdown ---
     print("Generating daily error breakdown...")
     df['Kuupäev'] = pd.to_datetime(df['Time']).dt.date
-    daily_groups = df.groupby('Kuupäev')
-
-    daily_df = pd.DataFrame()
-    daily_df['SOC liiga kõrge'] = daily_groups['Põhjus'].apply(lambda s: (s == 'SOC liiga kõrge').sum())
-    daily_df['SOC liiga madal'] = daily_groups['Põhjus'].apply(lambda s: (s == 'SOC liiga madal').sum())
-    daily_df['Võrgupiirang'] = daily_groups['Põhjus'].apply(lambda s: (s == 'Võrgupiirang').sum())
-    daily_df['Viga - uurimist vajav'] = daily_groups['Põhjus'].apply(lambda s: (s == 'Viga - uurimist vajav').sum())
-    daily_df['Vigade koguarv'] = daily_df.sum(axis=1)
-    daily_df['Ridade arv'] = daily_groups['Põhjus'].count()
-
-    # Error percentages out of total errors per day
-    for col in ['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']:
-        daily_df[col + ' (%)'] = (daily_df[col] / daily_df['Vigade koguarv'].replace(0, np.nan) * 100).round(2)
-
+    all_dates = sorted(df['Kuupäev'].unique())
+    
+    daily_df = pd.DataFrame(index=all_dates)
     daily_df.index.name = 'Kuupäev'
+    
+    for cat in error_categories:
+        cat_daily = error_episodes_df[error_episodes_df['Üldine olek'] == cat].groupby('Kuupäev').size()
+        daily_df[cat] = cat_daily.reindex(all_dates, fill_value=0)
+        
+    daily_df['Vigade koguarv'] = daily_df[error_categories].sum(axis=1)
+    
+    total_daily_episodes = overall_episodes_df.groupby('Kuupäev').size()
+    daily_df['Juhtumite koguarv'] = total_daily_episodes.reindex(all_dates, fill_value=0)
+    
+    # Error percentages out of total errors per day
+    for col in error_categories:
+        daily_df[col + ' (%)'] = (daily_df[col] / daily_df['Vigade koguarv'].replace(0, np.nan) * 100).round(2)
+        daily_df[col + ' (%)'] = daily_df[col + ' (%)'].fillna(0.0)
+        
     print(f"Writing daily error summary to CSV: {output_csv_daily}...")
     daily_df.reset_index().to_csv(output_csv_daily, index=False)
 
@@ -389,7 +402,7 @@ def main(date_arg=None):
     # 1. Pie Chart - 4 core errors, % from error total
     plt.figure(figsize=(10, 8))
     error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=error_colors)
-    plt.title('Probleemide jaotus (aprill 2026)', fontsize=14, fontweight='bold')
+    plt.title('Probleemide jaotus juhtumite põhjal (aprill 2026)', fontsize=14, fontweight='bold')
     plt.ylabel('')
     plt.tight_layout()
     save_chart(os.path.join(charts_dir, 'reason_distribution.png'), output_png_pie)
@@ -398,9 +411,9 @@ def main(date_arg=None):
     plt.figure(figsize=(12, 6))
     hourly_problems = hourly_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
     hourly_problems.plot(kind='bar', stacked=True, color=error_colors, ax=plt.gca())
-    plt.title('Probleemide esinemine tundide lõikes (aprill 2026)', fontsize=14, fontweight='bold')
+    plt.title('Probleemide (intsidentide) algusajad tundide lõikes (aprill 2026)', fontsize=14, fontweight='bold')
     plt.xlabel('Tund (0-23)', fontsize=12)
-    plt.ylabel('Probleemide arv', fontsize=12)
+    plt.ylabel('Juhtumite arv', fontsize=12)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     plt.legend(title='Probleemi tüüp')
     plt.tight_layout()
@@ -425,19 +438,19 @@ def main(date_arg=None):
     plt.figure(figsize=(14, 6))
     for col, color in zip(daily_plot.columns, error_colors):
         plt.plot(daily_df.index, daily_df[col], label=col, color=color, linewidth=2, marker='o', markersize=4)
-    plt.title('Probleemide esinemine päevade lõikes (aprill 2026)', fontsize=14, fontweight='bold')
+    plt.title('Probleemide esinemine päevade lõikes (juhtumite arv, aprill 2026)', fontsize=14, fontweight='bold')
     plt.xlabel('Kuupäev', fontsize=12)
-    plt.ylabel('Probleemide arv', fontsize=12)
+    plt.ylabel('Juhtumite arv', fontsize=12)
     plt.legend(title='Probleemi tüüp')
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.tight_layout()
     save_chart(os.path.join(charts_dir, 'problems_by_day.png'), output_png_daily_timeline)
 
-    # 5. Overall error share pie chart (% of total error rows)
+    # 5. Overall error share pie chart (% of total error incidents)
     plt.figure(figsize=(10, 8))
     error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=90, colors=error_colors,
                       wedgeprops=dict(edgecolor='white', linewidth=2))
-    plt.title('Probleemide osakaalud kogu perioodi lõikes (ainult vead) (aprill 2026)', fontsize=14, fontweight='bold')
+    plt.title('Probleemide osakaalud kogu perioodi lõikes (ainult vead, juhtumite arv) (aprill 2026)', fontsize=14, fontweight='bold')
     plt.ylabel('')
     plt.tight_layout()
     save_chart(os.path.join(charts_dir, 'error_share_pie.png'), output_png_daily_pie)
@@ -447,19 +460,19 @@ def main(date_arg=None):
     
     # Left: 2-slice pie chart (Normaalne töö vs Probleemid kokku)
     health_2_labels = ['Normaalne töö', 'Probleemid kokku']
-    health_2_counts = [total_normal, total_errors]
+    health_2_counts = [total_normal_incidents, total_error_incidents]
     health_2_colors = ['#2ecc71', '#e74c3c']
     ax1.pie(health_2_counts, labels=health_2_labels, autopct='%1.2f%%', startangle=140,
             colors=health_2_colors, wedgeprops=dict(edgecolor='white', linewidth=2),
             textprops={'fontsize': 12, 'weight': 'bold'})
-    ax1.set_title('Süsteemi üldine tööolek koguajast', fontsize=14, fontweight='bold')
+    ax1.set_title('Süsteemi üldine tööolek (juhtumite arv)', fontsize=14, fontweight='bold')
     
     # Right: 5-slice pie chart (Normaalne töö + 4 errors)
     health_5_colors = ['#2ecc71', '#f1c40f', '#e74c3c', '#e67e22', '#9b59b6']
     ax2.pie(overall_counts, labels=overall_counts.index, autopct='%1.2f%%', startangle=140,
             colors=health_5_colors, wedgeprops=dict(edgecolor='white', linewidth=1.5),
             textprops={'fontsize': 11})
-    ax2.set_title('Kõikide kategooriate osakaal koguajast', fontsize=14, fontweight='bold')
+    ax2.set_title('Kõikide kategooriate osakaal (juhtumite arv)', fontsize=14, fontweight='bold')
     
     plt.tight_layout()
     save_chart(os.path.join(charts_dir, 'uldine_tervis_pie.png'), output_png_yldine_pie)
@@ -467,7 +480,7 @@ def main(date_arg=None):
     # 7. Stacked Percentage Bar Chart - Overall health by hour of day
     plt.figure(figsize=(14, 7))
     hourly_overall_pct.plot(kind='bar', stacked=True, color=health_5_colors, ax=plt.gca(), width=0.8)
-    plt.title('Süsteemi olekute jaotus tundide lõikes (% koguajast tunnis)', fontsize=14, fontweight='bold')
+    plt.title('Süsteemi olekute jaotus tundide lõikes (% juhtumite arvust tunnis)', fontsize=14, fontweight='bold')
     plt.xlabel('Tund (0-23)', fontsize=12)
     plt.ylabel('Osakaal (%)', fontsize=12)
     plt.ylim(0, 100)
@@ -484,20 +497,21 @@ def main(date_arg=None):
         if date_arg not in available_dates:
             print(f"Warning: Date {date_arg} not found in dataset. Available dates: {sorted(available_dates)}")
         else:
-            # Filter data for this date
-            day_df = df[df['Kuupäev'].astype(str) == date_arg]
+            # Filter error episodes for this date
+            day_episodes = error_episodes_df[error_episodes_df['Kuupäev'].astype(str) == date_arg]
             
             # Group by hour and category
-            day_hourly = day_df.groupby(['Tund', 'Põhjus']).size().unstack(fill_value=0)
-            # Reindex with the 4 error categories
+            day_hourly = day_episodes.groupby(['Tund', 'Üldine olek']).size().unstack(fill_value=0)
+            # Reindex with the 24 hours and the 4 error categories
+            day_hourly = day_hourly.reindex(index=range(24), fill_value=0)
             day_hourly = day_hourly.reindex(columns=error_categories, fill_value=0)
             
             # Generate the chart
             plt.figure(figsize=(12, 6))
             day_hourly.plot(kind='bar', stacked=True, color=error_colors, ax=plt.gca())
-            plt.title(f'Probleemide esinemine tundide lõikes kuupäeval {date_arg}', fontsize=14, fontweight='bold')
+            plt.title(f'Probleemide esinemine tundide lõikes kuupäeval {date_arg} (juhtumite arv)', fontsize=14, fontweight='bold')
             plt.xlabel('Tund (0-23)', fontsize=12)
-            plt.ylabel('Probleemide arv (ridu)', fontsize=12)
+            plt.ylabel('Probleemide arv (juhtumid)', fontsize=12)
             plt.grid(axis='y', linestyle='--', alpha=0.7)
             plt.legend(title='Probleemi tüüp')
             plt.tight_layout()
