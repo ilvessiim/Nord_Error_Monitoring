@@ -255,7 +255,7 @@ def main(date_arg=None):
         ]
     })
 
-    # --- Generate Overall Health Distribution (all episodes) ---
+    # --- Generate Overall Health Distribution (based on episode duration sum) ---
     print("Generating Overall Health Distribution...")
     overall_categories = [
         'Normaalne töö',
@@ -264,17 +264,20 @@ def main(date_arg=None):
         'SOC liiga madal',
         'Viga - uurimist vajav'
     ]
-    overall_counts = overall_episodes_df['Üldine olek'].value_counts().reindex(overall_categories, fill_value=0)
-    overall_pct = (overall_counts / total_incidents) * 100 if total_incidents > 0 else 0
+    
+    # Calculate duration sum per overall category
+    overall_durations = overall_episodes_df.groupby('Üldine olek')['Kestvus (sekundit)'].sum().reindex(overall_categories, fill_value=0)
+    total_duration = overall_durations.sum()
+    overall_pct = (overall_durations / total_duration) * 100 if total_duration > 0 else 0
 
     overall_df = pd.DataFrame({
-        'Juhtumite arv (episoodid)': overall_counts,
-        'Osakaal juhtumitest (%)': overall_pct.round(2)
+        'Kestvuse summa (tundi)': (overall_durations / 3600).round(2),
+        'Osakaal koguajast (%)': overall_pct.round(2)
     })
     overall_df.index.name = 'Kategooria'
 
-    # Hourly overall health analysis (incidents starting in each hour)
-    hourly_overall = overall_episodes_df.groupby(['Tund', 'Üldine olek']).size().unstack(fill_value=0)
+    # Hourly overall health analysis based on telemetry rows (represents exact time share per hour)
+    hourly_overall = df.groupby(['Tund', 'Üldine olek']).size().unstack(fill_value=0)
     hourly_overall = hourly_overall.reindex(index=range(24), fill_value=0)
     hourly_overall = hourly_overall.reindex(columns=overall_categories, fill_value=0)
     hourly_overall_pct = hourly_overall.div(hourly_overall.sum(axis=1), axis=0) * 100
@@ -460,19 +463,19 @@ def main(date_arg=None):
     
     # Left: 2-slice pie chart (Normaalne töö vs Probleemid kokku)
     health_2_labels = ['Normaalne töö', 'Probleemid kokku']
-    health_2_counts = [total_normal_incidents, total_error_incidents]
+    health_2_counts = [overall_durations['Normaalne töö'], overall_durations[error_categories].sum()]
     health_2_colors = ['#2ecc71', '#e74c3c']
     ax1.pie(health_2_counts, labels=health_2_labels, autopct='%1.2f%%', startangle=140,
             colors=health_2_colors, wedgeprops=dict(edgecolor='white', linewidth=2),
             textprops={'fontsize': 12, 'weight': 'bold'})
-    ax1.set_title('Süsteemi üldine tööolek (juhtumite arv)', fontsize=14, fontweight='bold')
+    ax1.set_title('Süsteemi üldine tööolek (kestvuse järgi)', fontsize=14, fontweight='bold')
     
     # Right: 5-slice pie chart (Normaalne töö + 4 errors)
     health_5_colors = ['#2ecc71', '#f1c40f', '#e74c3c', '#e67e22', '#9b59b6']
-    ax2.pie(overall_counts, labels=overall_counts.index, autopct='%1.2f%%', startangle=140,
+    ax2.pie(overall_durations, labels=overall_durations.index, autopct='%1.2f%%', startangle=140,
             colors=health_5_colors, wedgeprops=dict(edgecolor='white', linewidth=1.5),
             textprops={'fontsize': 11})
-    ax2.set_title('Kõikide kategooriate osakaal (juhtumite arv)', fontsize=14, fontweight='bold')
+    ax2.set_title('Kõikide kategooriate osakaal (kestvuse järgi)', fontsize=14, fontweight='bold')
     
     plt.tight_layout()
     save_chart(os.path.join(charts_dir, 'uldine_tervis_pie.png'), output_png_yldine_pie)
@@ -480,7 +483,7 @@ def main(date_arg=None):
     # 7. Stacked Percentage Bar Chart - Overall health by hour of day
     plt.figure(figsize=(14, 7))
     hourly_overall_pct.plot(kind='bar', stacked=True, color=health_5_colors, ax=plt.gca(), width=0.8)
-    plt.title('Süsteemi olekute jaotus tundide lõikes (% juhtumite arvust tunnis)', fontsize=14, fontweight='bold')
+    plt.title('Süsteemi olekute jaotus tundide lõikes (% ajalisest kestvusest tunnis)', fontsize=14, fontweight='bold')
     plt.xlabel('Tund (0-23)', fontsize=12)
     plt.ylabel('Osakaal (%)', fontsize=12)
     plt.ylim(0, 100)
