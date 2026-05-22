@@ -12,6 +12,7 @@ def main():
     output_csv_detail = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.csv'
     output_csv_summary = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary.csv'
     output_csv_errors = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_errors.csv'
+    output_csv_all_errors = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_all_errors.csv'
     
     print("Loading data...")
     if not os.path.exists(csv_path):
@@ -124,6 +125,16 @@ def main():
     print("Filtering errors...")
     errors_df = df[df['Põhjus'] == 'Viga - uurimist vajav'].sort_values('Time')
     print(f"Found {len(errors_df)} error rows.")
+    
+    # Filter all requested error types
+    all_errors_list = [
+        "SOC liiga kõrge laadimiseks",
+        "SOC liiga madal tühjendamiseks",
+        "Võrgupiirang",
+        "Viga - uurimist vajav"
+    ]
+    all_errors_df = df[df['Põhjus'].isin(all_errors_list)].sort_values('Time')
+    print(f"Found {len(all_errors_df)} total rows matching requested error categories.")
 
     # 7. Write to Excel using openpyxl
     print(f"Writing to Excel file: {output_excel}...")
@@ -146,6 +157,9 @@ def main():
     
     print(f"Writing error output to CSV: {output_csv_errors}...")
     errors_df.to_csv(output_csv_errors, index=False)
+    
+    print(f"Writing all requested errors to CSV: {output_csv_all_errors}...")
+    all_errors_df.to_csv(output_csv_all_errors, index=False)
     
     print(f"Writing combined summary to CSV: {output_csv_summary}...")
     with open(output_csv_summary, 'w', encoding='utf-8') as f:
