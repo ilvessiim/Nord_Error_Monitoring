@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-def main():
+def main(date_arg=None):
     csv_path = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_combined.csv'
     
     # Summary CSV Outputs
@@ -13,6 +13,7 @@ def main():
     output_csv_reasons = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_reasons.csv'
     output_csv_daily = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_errors_by_date.csv'
     output_csv_yldine_tervis = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_yldine_tervis.csv'
+    output_csv_summary_episodes = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_episoodid.csv'
 
     # Chart PNG outputs (saved to Downloads)
     output_png_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_jaotus.png'
@@ -83,12 +84,36 @@ def main():
     mask_ok = df['Täitmise %'] >= 95
     df.loc[mask_ok, 'Põhjus'] = "Käsk täidetud"
 
+    # --- Group consecutive rows into episodes and calculate durations ---
+    print("Grouping consecutive rows into episodes...")
+    df = df.sort_values('Time').reset_index(drop=True)
+    df['Time_dt'] = pd.to_datetime(df['Time'])
+    
+    # Time diff in seconds
+    time_diffs = df['Time_dt'].diff().dt.total_seconds()
+    
+    # An episode is consecutive rows with same Põhjus and time gap <= 30s
+    new_episode = (df['Põhjus'] != df['Põhjus'].shift(1)) | (time_diffs > 30)
+    df['Episoodi ID'] = new_episode.cumsum()
+    
+    # Calculate durations per episode
+    episode_bounds = df.groupby('Episoodi ID')['Time_dt'].agg(['min', 'max'])
+    episode_durations = (episode_bounds['max'] - episode_bounds['min']).dt.total_seconds() + 25
+    
+    # Map back to rows
+    df['Episoodi kestvus (sekundit)'] = df['Episoodi ID'].map(episode_durations).astype(int)
+    df['Episoodi kestvus (minutit)'] = (df['Episoodi kestvus (sekundit)'] / 60).round(2)
+
     # Save datetime column for plotting later before cleanup
     time_dt_series = df['Time_dt']
     df = df.drop(columns=['Time_dt'])
     
     # Reorder columns
-    cols = ['Time', 'ESS SoC', 'ESS Plan', 'PV Power', 'ESS Power', 'Grid Power', 'Täitmise %', 'Põhjus', 'Tund']
+    cols = [
+        'Time', 'ESS SoC', 'ESS Plan', 'PV Power', 'ESS Power', 'Grid Power', 
+        'Täitmise %', 'Põhjus', 'Tund', 'Episoodi ID', 
+        'Episoodi kestvus (sekundit)', 'Episoodi kestvus (minutit)'
+    ]
     df = df[cols]
 
     # --- Write Separate CSV Files (using detailed classifications) ---
@@ -205,6 +230,35 @@ def main():
         hourly_df['Võrgupiirang'] + hourly_df['Viga - uurimist vajav']
     )
 
+    # --- Generate Episode Statistics (only 4 core errors) ---
+    print("Generating Episode Statistics...")
+    # Group by Episode ID to get one row per episode
+    episodes_df = df.groupby('Episoodi ID').first().reset_index()
+    error_episodes = episodes_df[episodes_df['Põhjus'].isin(error_categories)]
+    
+    episode_stats = []
+    for cat in error_categories:
+        cat_episodes = error_episodes[error_episodes['Põhjus'] == cat]
+        num_incidents = len(cat_episodes)
+        if num_incidents > 0:
+            total_sec = cat_episodes['Episoodi kestvus (sekundit)'].sum()
+            avg_sec = cat_episodes['Episoodi kestvus (sekundit)'].mean()
+            max_sec = cat_episodes['Episoodi kestvus (sekundit)'].max()
+        else:
+            total_sec = 0
+            avg_sec = 0
+            max_sec = 0
+            
+        episode_stats.append({
+            'Probleem': cat,
+            'Juhtumite arv (episoodid)': num_incidents,
+            'Kokku kestvus (sekundit)': int(total_sec),
+            'Kokku kestvus (tundi)': round(total_sec / 3600, 2),
+            'Keskmine kestvus (sekundit)': round(avg_sec, 1),
+            'Maksimaalne kestvus (sekundit)': int(max_sec)
+        })
+    episode_summary_df = pd.DataFrame(episode_stats)
+
     # --- Write Outputs to Downloads ---
     print(f"Writing combined summary to CSV: {output_csv_summary}...")
     with open(output_csv_summary, 'w', encoding='utf-8') as f:
@@ -212,6 +266,8 @@ def main():
         stats_df.to_csv(f, index=False)
         f.write("\nÜLDINE JAOTUS KOGUAJAST\n")
         overall_df.to_csv(f, index=True)
+        f.write("\nPROBLEEMIDE JUHTUMID (EPISOODID) JA KESTVUSED\n")
+        episode_summary_df.to_csv(f, index=False)
         f.write("\nPROBLEEMIDE JAOTUS (ainult 4 viga, % vigadest)\n")
         summary_df.to_csv(f, index=True)
         f.write("\nTUNNIPÕHINE ANALÜÜS (ainult 4 viga)\n")
@@ -225,6 +281,9 @@ def main():
 
     print(f"Writing overall health summary to CSV: {output_csv_yldine_tervis}...")
     overall_df.to_csv(output_csv_yldine_tervis, index=True)
+
+    print(f"Writing episode summary to CSV: {output_csv_summary_episodes}...")
+    episode_summary_df.to_csv(output_csv_summary_episodes, index=False)
 
     # --- Daily error breakdown ---
     print("Generating daily error breakdown...")
@@ -369,6 +428,38 @@ def main():
     plt.tight_layout()
     save_chart(os.path.join(charts_dir, 'uldine_tervis_tundide_kaupa.png'), output_png_yldine_hourly)
     
+    # --- Optional Day-Specific Analysis (if date_arg is provided) ---
+    if date_arg:
+        print(f"Generating date-specific analysis for: {date_arg}...")
+        df['Kuupäev'] = pd.to_datetime(df['Time']).dt.date
+        available_dates = df['Kuupäev'].astype(str).unique()
+        if date_arg not in available_dates:
+            print(f"Warning: Date {date_arg} not found in dataset. Available dates: {sorted(available_dates)}")
+        else:
+            # Filter data for this date
+            day_df = df[df['Kuupäev'].astype(str) == date_arg]
+            
+            # Group by hour and category
+            day_hourly = day_df.groupby(['Tund', 'Põhjus']).size().unstack(fill_value=0)
+            # Reindex with the 4 error categories
+            day_hourly = day_hourly.reindex(columns=error_categories, fill_value=0)
+            
+            # Generate the chart
+            plt.figure(figsize=(12, 6))
+            day_hourly.plot(kind='bar', stacked=True, color=error_colors, ax=plt.gca())
+            plt.title(f'Probleemide esinemine tundide lõikes kuupäeval {date_arg}', fontsize=14, fontweight='bold')
+            plt.xlabel('Tund (0-23)', fontsize=12)
+            plt.ylabel('Probleemide arv (ridu)', fontsize=12)
+            plt.grid(axis='y', linestyle='--', alpha=0.7)
+            plt.legend(title='Probleemi tüüp')
+            plt.tight_layout()
+            
+            # Save paths
+            output_png_day = f'/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_paevapohine_{date_arg}.png'
+            scratch_png_day = os.path.join(charts_dir, f'uldine_tervis_paevapohine_{date_arg}.png')
+            save_chart(scratch_png_day, output_png_day)
+            print(f"Saved day-specific chart to {output_png_day}")
+            
     print("\n--- ANALYSIS COMPLETED ---")
     print(stats_df.to_string(index=False))
     print("\nÜldine olekute jaotus koguajast:")
@@ -377,4 +468,8 @@ def main():
     print(summary_df)
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Battery Telemetry Analysis")
+    parser.add_argument('--date', type=str, help="Specific date for hourly analysis (YYYY-MM-DD)", default=None)
+    args = parser.parse_args()
+    main(args.date)
