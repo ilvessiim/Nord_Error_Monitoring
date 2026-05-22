@@ -50,13 +50,13 @@ def main():
     mask_grid = (expected_grid.abs() >= 50) | (df['Grid Power'].abs() >= 50)
     df.loc[mask_grid, 'Põhjus'] = "Võrgupiirang"
     
-    # Priority 4: SOC liiga kõrge laadimiseks (SOC >= 90% AND ESS Plan < 0)
-    mask_soc_high = (df['ESS SoC'] >= 90) & (df['ESS Plan'] < 0)
-    df.loc[mask_soc_high, 'Põhjus'] = "SOC liiga kõrge laadimiseks"
+    # Priority 4: SOC liiga kõrge (SOC >= 90%)
+    mask_soc_high = df['ESS SoC'] >= 90
+    df.loc[mask_soc_high, 'Põhjus'] = "SOC liiga kõrge"
     
-    # Priority 3: SOC liiga madal tühjendamiseks (SOC <= 10% AND ESS Plan > 0)
-    mask_soc_low = (df['ESS SoC'] <= 10) & (df['ESS Plan'] > 0)
-    df.loc[mask_soc_low, 'Põhjus'] = "SOC liiga madal tühjendamiseks"
+    # Priority 3: SOC liiga madal (SOC <= 10%)
+    mask_soc_low = df['ESS SoC'] <= 10
+    df.loc[mask_soc_low, 'Põhjus'] = "SOC liiga madal"
     
     # Priority 2: No Command (ESS Plan = 0)
     mask_no_cmd = (df['ESS Plan'] == 0) & (df['ESS Power'] == 0)
@@ -132,8 +132,8 @@ def main():
     
     # Filter all requested error types
     all_errors_list = [
-        "SOC liiga kõrge laadimiseks",
-        "SOC liiga madal tühjendamiseks",
+        "SOC liiga kõrge",
+        "SOC liiga madal",
         "Võrgupiirang",
         "Viga - uurimist vajav"
     ]
@@ -163,10 +163,10 @@ def main():
     errors_df.to_csv(output_csv_errors, index=False)
     
     print(f"Writing SOC too high errors to CSV: {output_csv_soc_high}...")
-    df[df['Põhjus'] == 'SOC liiga kõrge laadimiseks'].sort_values('Time').to_csv(output_csv_soc_high, index=False)
+    df[df['Põhjus'] == 'SOC liiga kõrge'].sort_values('Time').to_csv(output_csv_soc_high, index=False)
     
     print(f"Writing SOC too low errors to CSV: {output_csv_soc_low}...")
-    df[df['Põhjus'] == 'SOC liiga madal tühjendamiseks'].sort_values('Time').to_csv(output_csv_soc_low, index=False)
+    df[df['Põhjus'] == 'SOC liiga madal'].sort_values('Time').to_csv(output_csv_soc_low, index=False)
     
     print(f"Writing Grid Limit constraint errors to CSV: {output_csv_grid_limit}...")
     df[df['Põhjus'] == 'Võrgupiirang'].sort_values('Time').to_csv(output_csv_grid_limit, index=False)
