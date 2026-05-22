@@ -78,6 +78,7 @@ def main(date_arg=None):
     output_csv_osaline_taitmine = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_osaline_taitmine.csv'
     output_csv_ootamatu_reageering = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_ootamatu_reageering.csv'
     output_csv_uurimist_vajav = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_uurimist_vajav.csv'
+    output_csv_grid_extremes = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_power_ekstreemne.csv'
 
     print("Loading data...")
     if not os.path.exists(csv_path):
@@ -112,14 +113,15 @@ def main(date_arg=None):
         16: ("[PNG] Vigade algusajad tundide lõikes (raw_telemetry_2ccf67f82f80_chart_probleemid_tundide_kaupa.png)", output_png_hourly),
         17: ("[PNG] Vigade esinemine päevade lõikes (raw_telemetry_2ccf67f82f80_chart_probleemid_paevade_kaupa.png)", output_png_daily_timeline),
         18: ("[PNG] ESS täitmise protsent ajateljel (raw_telemetry_2ccf67f82f80_chart_taitmine_ajateljel.png)", output_png_timeline),
-        19: ("[PNG] Konkreetse päeva tunnipõhine graafik (raw_telemetry_2ccf67f82f80_chart_paevapohine_<kuupäev>.png)", None)
+        19: ("[PNG] Konkreetse päeva tunnipõhine graafik (raw_telemetry_2ccf67f82f80_chart_paevapohine_<kuupäev>.png)", None),
+        20: ("[CSV] Ekstreemse võrguvõimsuse read (Grid Power > 50 või < -50) (raw_telemetry_2ccf67f82f80_grid_power_ekstreemne.csv)", output_csv_grid_extremes)
     }
 
     # Determine execution mode (interactive vs automated)
     selected_indices = set()
     if date_arg is not None:
         # Automated mode via CLI args
-        selected_indices = set(range(1, 20))
+        selected_indices = set(range(1, 21))
         print(f"Jooksutatakse automaatrežiimis. Valitud kõik failid. Kuupäev: {date_arg}")
     else:
         # Interactive mode
@@ -205,6 +207,12 @@ def main(date_arg=None):
     mask_ok = df['Täitmise %'] >= 95
     df.loc[mask_ok, 'Põhjus'] = "Käsk täidetud"
 
+    # Override for Grid Power between 0 and +50
+    # If the row was categorized as "Võrgupiirang" but Grid Power is in [0, 50),
+    # the capacity limit was not reached in practice, so it must be "Viga - uurimist vajav".
+    mask_vorgupiirang_override = (df['Põhjus'] == 'Võrgupiirang') & (df['Grid Power'] >= 0) & (df['Grid Power'] < 50)
+    df.loc[mask_vorgupiirang_override, 'Põhjus'] = "Viga - uurimist vajav"
+
     # --- Group consecutive rows into episodes and calculate durations ---
     print("Grouping consecutive rows into episodes...")
     df = df.sort_values('Time').reset_index(drop=True)
@@ -238,7 +246,7 @@ def main(date_arg=None):
     df = df[cols]
 
     # --- Write Separate CSV Files (using detailed classifications, aggregated by episode) ---
-    if any(x in selected_indices for x in [7, 8, 9, 10, 11, 12]):
+    if any(x in selected_indices for x in [7, 8, 9, 10, 11, 12, 20]):
         print("Writing separate CSV files for selected categories...")
         if 7 in selected_indices:
             aggregate_episodes(df[df['Põhjus'] == 'SOC liiga kõrge']).to_csv(output_csv_soc_korge, index=False)
@@ -252,6 +260,10 @@ def main(date_arg=None):
             aggregate_episodes(df[df['Põhjus'] == 'Ootamatu reageering']).to_csv(output_csv_ootamatu_reageering, index=False)
         if 12 in selected_indices:
             aggregate_episodes(df[df['Põhjus'] == 'Viga - uurimist vajav']).to_csv(output_csv_uurimist_vajav, index=False)
+        if 20 in selected_indices:
+            print(f"Writing grid power extremes to CSV: {output_csv_grid_extremes}...")
+            df_extremes = df[(df['Grid Power'] > 50) | (df['Grid Power'] < -50)]
+            df_extremes.to_csv(output_csv_grid_extremes, index=False)
 
     # --- Map Non-Critical Categories for summaries and charts ---
     print("Merging non-critical classifications (Osaline täitmine -> Käsk täidetud, Ootamatu reageering -> Käsku ei antud)...")
@@ -616,6 +628,13 @@ def main(date_arg=None):
             scratch_png_day = os.path.join(charts_dir, f'uldine_tervis_paevapohine_{date_arg}.png')
             save_chart(scratch_png_day, output_png_day)
             print(f"Saved day-specific chart to {output_png_day}")
+
+            # Export day-specific raw error rows to CSV
+            day_raw_df = df[df['Kuupäev'].astype(str) == date_arg]
+            day_errors = day_raw_df[~day_raw_df['Põhjus'].isin(['Käsk täidetud', 'Käsku ei antud'])]
+            output_csv_day_errors = f'/Users/user/Downloads/raw_telemetry_2ccf67f82f80_vead_{date_arg}.csv'
+            day_errors.to_csv(output_csv_day_errors, index=False)
+            print(f"Saved day-specific error log to {output_csv_day_errors}")
             
     print("\n--- ANALYSIS COMPLETED ---")
     print(stats_df.to_string(index=False))
