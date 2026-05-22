@@ -11,11 +11,16 @@ def main():
     # CSV Outputs
     output_csv_detail = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.csv'
     output_csv_summary = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary.csv'
-    output_csv_errors = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_errors.csv'
     output_csv_all_errors = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_all_errors.csv'
-    output_csv_soc_high = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_high.csv'
-    output_csv_soc_low = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_low.csv'
-    output_csv_grid_limit = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_limits.csv'
+    
+    # Separate CSV files for each specific problem category
+    output_csv_soc_korge = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_liiga_korge.csv'
+    output_csv_soc_madal = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_liiga_madal.csv'
+    output_csv_vorgupiirang = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_vorgupiirang.csv'
+    output_csv_osaline_taitmine = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_osaline_taitmine.csv'
+    output_csv_ootamatu_reageering = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_ootamatu_reageering.csv'
+    output_csv_uurimist_vajav = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_uurimist_vajav.csv'
+
     
     print("Loading data...")
     if not os.path.exists(csv_path):
@@ -130,12 +135,13 @@ def main():
     errors_df = df[df['Põhjus'] == 'Viga - uurimist vajav'].sort_values('Time')
     print(f"Found {len(errors_df)} error rows.")
     
-    # Filter all requested error types
     all_errors_list = [
         "SOC liiga kõrge",
         "SOC liiga madal",
         "Võrgupiirang",
-        "Viga - uurimist vajav"
+        "Viga - uurimist vajav",
+        "Osaline täitmine",
+        "Ootamatu reageering"
     ]
     all_errors_df = df[df['Põhjus'].isin(all_errors_list)].sort_values('Time')
     print(f"Found {len(all_errors_df)} total rows matching requested error categories.")
@@ -155,21 +161,44 @@ def main():
         hourly_df.reset_index().to_excel(writer, sheet_name='Kokkuvõte', startrow=18, index=False)
         errors_df.to_excel(writer, sheet_name='Vead', index=False)
         
+    # Cleanup old confusing CSV files if they exist
+    old_files = [
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_errors.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_high.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_low.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_limits.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_partial.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_unexpected.csv'
+    ]
+    for old_file in old_files:
+        if os.path.exists(old_file):
+            try:
+                os.remove(old_file)
+                print(f"Removed old file: {old_file}")
+            except Exception as e:
+                print(f"Failed to remove {old_file}: {e}")
+
     # 8. Write to CSV files for easy local viewing on Macbook
     print(f"Writing detailed output to CSV: {output_csv_detail}...")
     df.to_csv(output_csv_detail, index=False)
     
-    print(f"Writing unexplained errors output to CSV: {output_csv_errors}...")
-    errors_df.to_csv(output_csv_errors, index=False)
+    print(f"Writing unexplained errors ('Viga - uurimist vajav') to CSV: {output_csv_uurimist_vajav}...")
+    errors_df.to_csv(output_csv_uurimist_vajav, index=False)
     
-    print(f"Writing SOC too high errors to CSV: {output_csv_soc_high}...")
-    df[df['Põhjus'] == 'SOC liiga kõrge'].sort_values('Time').to_csv(output_csv_soc_high, index=False)
+    print(f"Writing 'SOC liiga kõrge' errors to CSV: {output_csv_soc_korge}...")
+    df[df['Põhjus'] == 'SOC liiga kõrge'].sort_values('Time').to_csv(output_csv_soc_korge, index=False)
     
-    print(f"Writing SOC too low errors to CSV: {output_csv_soc_low}...")
-    df[df['Põhjus'] == 'SOC liiga madal'].sort_values('Time').to_csv(output_csv_soc_low, index=False)
+    print(f"Writing 'SOC liiga madal' errors to CSV: {output_csv_soc_madal}...")
+    df[df['Põhjus'] == 'SOC liiga madal'].sort_values('Time').to_csv(output_csv_soc_madal, index=False)
     
-    print(f"Writing Grid Limit constraint errors to CSV: {output_csv_grid_limit}...")
-    df[df['Põhjus'] == 'Võrgupiirang'].sort_values('Time').to_csv(output_csv_grid_limit, index=False)
+    print(f"Writing 'Võrgupiirang' errors to CSV: {output_csv_vorgupiirang}...")
+    df[df['Põhjus'] == 'Võrgupiirang'].sort_values('Time').to_csv(output_csv_vorgupiirang, index=False)
+    
+    print(f"Writing 'Osaline täitmine' errors to CSV: {output_csv_osaline_taitmine}...")
+    df[df['Põhjus'] == 'Osaline täitmine'].sort_values('Time').to_csv(output_csv_osaline_taitmine, index=False)
+    
+    print(f"Writing 'Ootamatu reageering' errors to CSV: {output_csv_ootamatu_reageering}...")
+    df[df['Põhjus'] == 'Ootamatu reageering'].sort_values('Time').to_csv(output_csv_ootamatu_reageering, index=False)
     
     print(f"Writing all requested errors combined to CSV: {output_csv_all_errors}...")
     all_errors_df.to_csv(output_csv_all_errors, index=False)
