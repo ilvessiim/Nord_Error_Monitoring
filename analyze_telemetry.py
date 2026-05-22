@@ -139,9 +139,7 @@ def main():
         "SOC liiga kõrge",
         "SOC liiga madal",
         "Võrgupiirang",
-        "Viga - uurimist vajav",
-        "Osaline täitmine",
-        "Ootamatu reageering"
+        "Viga - uurimist vajav"
     ]
     all_errors_df = df[df['Põhjus'].isin(all_errors_list)].sort_values('Time')
     print(f"Found {len(all_errors_df)} total rows matching requested error categories.")
