@@ -164,9 +164,41 @@ def main(date_arg=None):
     output_csv_uurimist_vajav = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_uurimist_vajav.csv')
     output_csv_grid_extremes = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_grid_power_ekstreemne.csv')
 
-    print(f"Loading data from {csv_path}...")
-    df = pd.read_csv(csv_path)
-    print(f"Loaded {len(df)} rows.")
+    if os.path.isdir(csv_path):
+        print(f"Loading data from folder {csv_path}...")
+        all_files = [f for f in os.listdir(csv_path) if f.lower().endswith('.csv')]
+        if not all_files:
+            print("Viga: Valitud kaustast ei leitud ühtegi CSV-faili.")
+            sys.exit(1)
+        
+        all_files.sort()
+        dfs = []
+        ref_cols = None
+        for file_name in all_files:
+            file_path = os.path.join(csv_path, file_name)
+            try:
+                header_df = pd.read_csv(file_path, nrows=0)
+                cols = header_df.columns.tolist()
+                
+                if ref_cols is None:
+                    ref_cols = cols
+                elif cols != ref_cols:
+                    print("Error - format is different")
+                    sys.exit(1)
+                
+                dfs.append(pd.read_csv(file_path))
+            except Exception as e:
+                print(f"Viga faili '{file_name}' lugemisel: {e}")
+                sys.exit(1)
+                
+        df = pd.concat(dfs, ignore_index=True)
+        if 'Time' in df.columns:
+            df = df.sort_values('Time').reset_index(drop=True)
+        print(f"Loaded and combined {len(all_files)} CSV files. Total rows: {len(df)}.")
+    else:
+        print(f"Loading data from {csv_path}...")
+        df = pd.read_csv(csv_path)
+        print(f"Loaded {len(df)} rows.")
 
     # 1. Parse timestamps and extract Hour
     print("Parsing timestamps...")
@@ -582,11 +614,23 @@ def main(date_arg=None):
     if any(x in selected_indices for x in [13, 14, 15, 16, 17, 18, 19]):
         print("Generating visualizations...")
         charts_dir = '/Users/user/.gemini/antigravity-ide/scratch'
-        os.makedirs(charts_dir, exist_ok=True)
+        use_scratch = False
+        try:
+            parent_dir = os.path.dirname(charts_dir)
+            if os.path.exists(parent_dir) and os.access(parent_dir, os.W_OK):
+                os.makedirs(charts_dir, exist_ok=True)
+                use_scratch = True
+        except Exception:
+            pass
+            
         error_colors = ['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6']
 
         def save_chart(fig_path_scratch, fig_path_downloads):
-            plt.savefig(fig_path_scratch, dpi=150)
+            if use_scratch:
+                try:
+                    plt.savefig(fig_path_scratch, dpi=150)
+                except Exception:
+                    pass
             plt.savefig(fig_path_downloads, dpi=150)
             plt.close()
 
