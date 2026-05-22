@@ -68,7 +68,6 @@ def main(date_arg=None):
     output_png_hourly = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemid_tundide_kaupa.png'
     output_png_timeline = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_taitmine_ajateljel.png'
     output_png_daily_timeline = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemid_paevade_kaupa.png'
-    output_png_daily_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_osakaalud.png'
     output_png_yldine_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_uldine_tervis_pie.png'
     output_png_yldine_hourly = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_uldine_tervis_tundide_kaupa.png'
 
@@ -92,7 +91,81 @@ def main(date_arg=None):
     print("Parsing timestamps...")
     df['Time_dt'] = pd.to_datetime(df['Time'])
     df['Tund'] = df['Time_dt'].dt.hour
-    
+
+    # Define file menu for interactive selection
+    files_menu = {
+        1: ("[CSV] Kogu analüüsi ühine koondtabel (raw_telemetry_2ccf67f82f80_summary.csv)", output_csv_summary),
+        2: ("[CSV] Üldine statistika (raw_telemetry_2ccf67f82f80_summary_stats.csv)", output_csv_stats),
+        3: ("[CSV] Üldine olekute jaotus koguajast (raw_telemetry_2ccf67f82f80_summary_yldine_tervis.csv)", output_csv_yldine_tervis),
+        4: ("[CSV] Vigade jaotus (raw_telemetry_2ccf67f82f80_summary_reasons.csv)", output_csv_reasons),
+        5: ("[CSV] Vigade kestvuse andmed (raw_telemetry_2ccf67f82f80_summary_episoodid.csv)", output_csv_summary_episodes),
+        6: ("[CSV] Vigade päevapõhine jaotus ja osakaalud (raw_telemetry_2ccf67f82f80_summary_errors_by_date.csv)", output_csv_daily),
+        7: ("[CSV] SOC liiga kõrge juhtumid (raw_telemetry_2ccf67f82f80_soc_liiga_korge.csv)", output_csv_soc_korge),
+        8: ("[CSV] SOC liiga madal juhtumid (raw_telemetry_2ccf67f82f80_soc_liiga_madal.csv)", output_csv_soc_madal),
+        9: ("[CSV] Võrgupiirangu juhtumid (raw_telemetry_2ccf67f82f80_vorgupiirang.csv)", output_csv_vorgupiirang),
+        10: ("[CSV] Osalise täitmise juhtumid (raw_telemetry_2ccf67f82f80_osaline_taitmine.csv)", output_csv_osaline_taitmine),
+        11: ("[CSV] Ootamatu reageeringu juhtumid (raw_telemetry_2ccf67f82f80_ootamatu_reageering.csv)", output_csv_ootamatu_reageering),
+        12: ("[CSV] Uurimist vajavad vead (raw_telemetry_2ccf67f82f80_uurimist_vajav.csv)", output_csv_uurimist_vajav),
+        13: ("[PNG] Üldine tööolek kestvuse järgi (raw_telemetry_2ccf67f82f80_chart_uldine_tervis_pie.png)", output_png_yldine_pie),
+        14: ("[PNG] Üldise tööoleku tunnipõhine jaotus (raw_telemetry_2ccf67f82f80_chart_uldine_tervis_tundide_kaupa.png)", output_png_yldine_hourly),
+        15: ("[PNG] Vigade jaotus (sektordiagramm) (raw_telemetry_2ccf67f82f80_chart_probleemide_jaotus.png)", output_png_pie),
+        16: ("[PNG] Vigade algusajad tundide lõikes (raw_telemetry_2ccf67f82f80_chart_probleemid_tundide_kaupa.png)", output_png_hourly),
+        17: ("[PNG] Vigade esinemine päevade lõikes (raw_telemetry_2ccf67f82f80_chart_probleemid_paevade_kaupa.png)", output_png_daily_timeline),
+        18: ("[PNG] ESS täitmise protsent ajateljel (raw_telemetry_2ccf67f82f80_chart_taitmine_ajateljel.png)", output_png_timeline),
+        19: ("[PNG] Konkreetse päeva tunnipõhine graafik (raw_telemetry_2ccf67f82f80_chart_paevapohine_<kuupäev>.png)", None)
+    }
+
+    # Determine execution mode (interactive vs automated)
+    selected_indices = set()
+    if date_arg is not None:
+        # Automated mode via CLI args
+        selected_indices = set(range(1, 20))
+        print(f"Jooksutatakse automaatrežiimis. Valitud kõik failid. Kuupäev: {date_arg}")
+    else:
+        # Interactive mode
+        print("\n=== TELEMEETRIA ANALÜÜSI VÄLJUNDFAILIDE VALIK ===")
+        print("Saadaval on järgmised väljundfailid:")
+        for k, v in files_menu.items():
+            print(f"  {k:2d}. {v[0]}")
+            
+        print("\nVali genereeritavad failid (sisesta numbrid komadega eraldatult, nt: 1,3,13 või vajuta lihtsalt Enter, et valida KÕIK):")
+        user_input = input("Valik: ").strip()
+        if not user_input:
+            selected_indices = set(files_menu.keys())
+        else:
+            for val in user_input.split(','):
+                val = val.strip()
+                if val.isdigit():
+                    idx = int(val)
+                    if idx in files_menu:
+                        selected_indices.add(idx)
+                    else:
+                        print(f"Hoiatus: Tundmatu faili number '{idx}' - ignoreeritakse.")
+                else:
+                    if val:
+                        print(f"Hoiatus: Vigane sisend '{val}' - ignoreeritakse.")
+                        
+        if 19 in selected_indices:
+            # Extract available dates for prompt validation
+            available_dates = df['Time_dt'].dt.date.astype(str).unique()
+            available_dates_sorted = sorted(available_dates)
+            print(f"\nSaadaolevad kuupäevad andmestikus: {', '.join(available_dates_sorted)}")
+            while True:
+                date_input = input("Sisesta soovitud kuupäev (AAAA-KK-PP, nt: 2026-04-10) või vajuta Enter, et vahele jätta: ").strip()
+                if not date_input:
+                    print("Päevapõhist graafikut ei genereerita.")
+                    selected_indices.discard(19)
+                    break
+                elif date_input in available_dates:
+                    date_arg = date_input
+                    break
+                else:
+                    print(f"Viga: Kuupäeva '{date_input}' ei leitud andmestikust. Vali nimekirjast sobiv kuupäev.")
+
+    if not selected_indices:
+        print("Ühtegi faili ei valitud. Analüüs lõpetatakse midagi salvestamata.")
+        return
+
     # 2. Vectorized calculation of Täitmise %
     print("Calculating Täitmise %...")
     df['Täitmise %'] = np.nan
@@ -165,14 +238,20 @@ def main(date_arg=None):
     df = df[cols]
 
     # --- Write Separate CSV Files (using detailed classifications, aggregated by episode) ---
-    print("Writing separate CSV files for each category (aggregated by episode)...")
-    
-    aggregate_episodes(df[df['Põhjus'] == 'SOC liiga kõrge']).to_csv(output_csv_soc_korge, index=False)
-    aggregate_episodes(df[df['Põhjus'] == 'SOC liiga madal']).to_csv(output_csv_soc_madal, index=False)
-    aggregate_episodes(df[df['Põhjus'] == 'Võrgupiirang']).to_csv(output_csv_vorgupiirang, index=False)
-    aggregate_episodes(df[df['Põhjus'] == 'Osaline täitmine']).to_csv(output_csv_osaline_taitmine, index=False)
-    aggregate_episodes(df[df['Põhjus'] == 'Ootamatu reageering']).to_csv(output_csv_ootamatu_reageering, index=False)
-    aggregate_episodes(df[df['Põhjus'] == 'Viga - uurimist vajav']).to_csv(output_csv_uurimist_vajav, index=False)
+    if any(x in selected_indices for x in [7, 8, 9, 10, 11, 12]):
+        print("Writing separate CSV files for selected categories...")
+        if 7 in selected_indices:
+            aggregate_episodes(df[df['Põhjus'] == 'SOC liiga kõrge']).to_csv(output_csv_soc_korge, index=False)
+        if 8 in selected_indices:
+            aggregate_episodes(df[df['Põhjus'] == 'SOC liiga madal']).to_csv(output_csv_soc_madal, index=False)
+        if 9 in selected_indices:
+            aggregate_episodes(df[df['Põhjus'] == 'Võrgupiirang']).to_csv(output_csv_vorgupiirang, index=False)
+        if 10 in selected_indices:
+            aggregate_episodes(df[df['Põhjus'] == 'Osaline täitmine']).to_csv(output_csv_osaline_taitmine, index=False)
+        if 11 in selected_indices:
+            aggregate_episodes(df[df['Põhjus'] == 'Ootamatu reageering']).to_csv(output_csv_ootamatu_reageering, index=False)
+        if 12 in selected_indices:
+            aggregate_episodes(df[df['Põhjus'] == 'Viga - uurimist vajav']).to_csv(output_csv_uurimist_vajav, index=False)
 
     # --- Map Non-Critical Categories for summaries and charts ---
     print("Merging non-critical classifications (Osaline täitmine -> Käsk täidetud, Ootamatu reageering -> Käsku ei antud)...")
@@ -320,30 +399,35 @@ def main(date_arg=None):
     episode_summary_df = pd.DataFrame(episode_stats)
 
     # --- Write Outputs to Downloads ---
-    print(f"Writing combined summary to CSV: {output_csv_summary}...")
-    with open(output_csv_summary, 'w', encoding='utf-8') as f:
-        f.write("ÜLDINE STATISTIKA\n")
-        stats_df.to_csv(f, index=False)
-        f.write("\nÜLDINE JAOTUS KOGUAJAST\n")
-        overall_df.to_csv(f, index=True)
-        f.write("\nPROBLEEMIDE JUHTUMID (EPISOODID) JA KESTVUSED\n")
-        episode_summary_df.to_csv(f, index=False)
-        f.write("\nPROBLEEMIDE JAOTUS (ainult 4 viga, % vigadest)\n")
-        summary_df.to_csv(f, index=True)
-        f.write("\nTUNNIPÕHINE ANALÜÜS (ainult 4 viga)\n")
-        hourly_df.reset_index().to_csv(f, index=False)
+    if 1 in selected_indices:
+        print(f"Writing combined summary to CSV: {output_csv_summary}...")
+        with open(output_csv_summary, 'w', encoding='utf-8') as f:
+            f.write("ÜLDINE STATISTIKA\n")
+            stats_df.to_csv(f, index=False)
+            f.write("\nÜLDINE JAOTUS KOGUAJAST\n")
+            overall_df.to_csv(f, index=True)
+            f.write("\nPROBLEEMIDE JUHTUMID (EPISOODID) JA KESTVUSED\n")
+            episode_summary_df.to_csv(f, index=False)
+            f.write("\nPROBLEEMIDE JAOTUS (ainult 4 viga, % vigadest)\n")
+            summary_df.to_csv(f, index=True)
+            f.write("\nTUNNIPÕHINE ANALÜÜS (ainult 4 viga)\n")
+            hourly_df.reset_index().to_csv(f, index=False)
 
-    print(f"Writing stats to CSV: {output_csv_stats}...")
-    stats_df.to_csv(output_csv_stats, index=False)
+    if 2 in selected_indices:
+        print(f"Writing stats to CSV: {output_csv_stats}...")
+        stats_df.to_csv(output_csv_stats, index=False)
 
-    print(f"Writing reasons to CSV: {output_csv_reasons}...")
-    summary_df.to_csv(output_csv_reasons, index=True)
+    if 4 in selected_indices:
+        print(f"Writing reasons to CSV: {output_csv_reasons}...")
+        summary_df.to_csv(output_csv_reasons, index=True)
 
-    print(f"Writing overall health summary to CSV: {output_csv_yldine_tervis}...")
-    overall_df.to_csv(output_csv_yldine_tervis, index=True)
+    if 3 in selected_indices:
+        print(f"Writing overall health summary to CSV: {output_csv_yldine_tervis}...")
+        overall_df.to_csv(output_csv_yldine_tervis, index=True)
 
-    print(f"Writing episode summary to CSV: {output_csv_summary_episodes}...")
-    episode_summary_df.to_csv(output_csv_summary_episodes, index=False)
+    if 5 in selected_indices:
+        print(f"Writing episode summary to CSV: {output_csv_summary_episodes}...")
+        episode_summary_df.to_csv(output_csv_summary_episodes, index=False)
 
     # --- Daily error breakdown ---
     print("Generating daily error breakdown...")
@@ -367,8 +451,9 @@ def main(date_arg=None):
         daily_df[col + ' (%)'] = (daily_df[col] / daily_df['Vigade koguarv'].replace(0, np.nan) * 100).round(2)
         daily_df[col + ' (%)'] = daily_df[col + ' (%)'].fillna(0.0)
         
-    print(f"Writing daily error summary to CSV: {output_csv_daily}...")
-    daily_df.reset_index().to_csv(output_csv_daily, index=False)
+    if 6 in selected_indices:
+        print(f"Writing daily error summary to CSV: {output_csv_daily}...")
+        daily_df.reset_index().to_csv(output_csv_daily, index=False)
 
     # --- Clean up obsolete files ---
     obsolete_files = [
@@ -381,7 +466,8 @@ def main(date_arg=None):
         '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_low.csv',
         '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_limits.csv',
         '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_partial.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_unexpected.csv'
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_unexpected.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_osakaalud.png'  # Removed redundant chart
     ]
     for obs_file in obsolete_files:
         if os.path.exists(obs_file):
@@ -391,121 +477,127 @@ def main(date_arg=None):
             except Exception as e:
                 print(f"Failed to remove {obs_file}: {e}")
 
+    # Remove scratch copy of redundant chart if it exists
+    scratch_obsolete_pie = '/Users/user/.gemini/antigravity-ide/scratch/error_share_pie.png'
+    if os.path.exists(scratch_obsolete_pie):
+        try:
+            os.remove(scratch_obsolete_pie)
+            print(f"Removed scratch obsolete file: {scratch_obsolete_pie}")
+        except Exception as e:
+            print(f"Failed to remove {scratch_obsolete_pie}: {e}")
+
     # --- Generate Visualizations ---
-    print("Generating visualizations...")
-    charts_dir = '/Users/user/.gemini/antigravity-ide/scratch'
-    os.makedirs(charts_dir, exist_ok=True)
-    error_colors = ['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6']
+    if any(x in selected_indices for x in [13, 14, 15, 16, 17, 18, 19]):
+        print("Generating visualizations...")
+        charts_dir = '/Users/user/.gemini/antigravity-ide/scratch'
+        os.makedirs(charts_dir, exist_ok=True)
+        error_colors = ['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6']
 
-    def save_chart(fig_path_scratch, fig_path_downloads):
-        plt.savefig(fig_path_scratch, dpi=150)
-        plt.savefig(fig_path_downloads, dpi=150)
-        plt.close()
+        def save_chart(fig_path_scratch, fig_path_downloads):
+            plt.savefig(fig_path_scratch, dpi=150)
+            plt.savefig(fig_path_downloads, dpi=150)
+            plt.close()
 
-    # 1. Pie Chart - 4 core errors, % from error total
-    plt.figure(figsize=(10, 8))
-    error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=error_colors)
-    plt.title('Probleemide jaotus juhtumite põhjal (aprill 2026)', fontsize=14, fontweight='bold')
-    plt.ylabel('')
-    plt.tight_layout()
-    save_chart(os.path.join(charts_dir, 'reason_distribution.png'), output_png_pie)
+        # 15. [PNG] Vigade jaotus (sektordiagramm)
+        if 15 in selected_indices:
+            print("Generating error distribution pie chart...")
+            plt.figure(figsize=(10, 8))
+            error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=error_colors)
+            plt.title('Probleemide jaotus juhtumite põhjal (aprill 2026)', fontsize=14, fontweight='bold')
+            plt.ylabel('')
+            plt.tight_layout()
+            save_chart(os.path.join(charts_dir, 'reason_distribution.png'), output_png_pie)
 
-    # 2. Bar Chart - 4 core errors by hour of day
-    plt.figure(figsize=(12, 6))
-    hourly_problems = hourly_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
-    hourly_problems.plot(kind='bar', stacked=True, color=error_colors, ax=plt.gca())
-    plt.title('Probleemide (intsidentide) algusajad tundide lõikes (aprill 2026)', fontsize=14, fontweight='bold')
-    plt.xlabel('Tund (0-23)', fontsize=12)
-    plt.ylabel('Juhtumite arv', fontsize=12)
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.legend(title='Probleemi tüüp')
-    plt.tight_layout()
-    save_chart(os.path.join(charts_dir, 'problems_by_hour.png'), output_png_hourly)
+        # 16. [PNG] Vigade algusajad tundide lõikes
+        if 16 in selected_indices:
+            print("Generating hourly error bar chart...")
+            plt.figure(figsize=(12, 6))
+            hourly_problems = hourly_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
+            hourly_problems.plot(kind='bar', stacked=True, color=error_colors, ax=plt.gca())
+            plt.title('Probleemide (intsidentide) algusajad tundide lõikes (aprill 2026)', fontsize=14, fontweight='bold')
+            plt.xlabel('Tund (0-23)', fontsize=12)
+            plt.ylabel('Juhtumite arv', fontsize=12)
+            plt.grid(axis='y', linestyle='--', alpha=0.7)
+            plt.legend(title='Probleemi tüüp')
+            plt.tight_layout()
+            save_chart(os.path.join(charts_dir, 'problems_by_hour.png'), output_png_hourly)
 
-    # 3. Execution % Timeline
-    df['Time_dt'] = time_dt_series
-    hourly_ts = df.set_index('Time_dt').resample('h')['Täitmise %'].mean()
-    plt.figure(figsize=(14, 6))
-    plt.plot(hourly_ts.index, hourly_ts.values, label='Keskmine täitmise % (tunnipõhine)', color='#1abc9c', linewidth=1.5)
-    plt.axhline(95, color='#2ecc71', linestyle='--', label='Sihtväärtus (95%)', alpha=0.8)
-    plt.title('Keskmine täitmise protsent ajateljel (tunnipõhine keskmine)', fontsize=14, fontweight='bold')
-    plt.xlabel('Kuupäev', fontsize=12)
-    plt.ylabel('Täitmise %', fontsize=12)
-    plt.legend(loc='lower left')
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.tight_layout()
-    save_chart(os.path.join(charts_dir, 'execution_timeline.png'), output_png_timeline)
+        # 18. [PNG] ESS täitmise protsent ajateljel
+        if 18 in selected_indices:
+            print("Generating execution timeline...")
+            df['Time_dt'] = time_dt_series
+            hourly_ts = df.set_index('Time_dt').resample('h')['Täitmise %'].mean()
+            plt.figure(figsize=(14, 6))
+            plt.plot(hourly_ts.index, hourly_ts.values, label='Keskmine täitmise % (tunnipõhine)', color='#1abc9c', linewidth=1.5)
+            plt.axhline(95, color='#2ecc71', linestyle='--', label='Sihtväärtus (95%)', alpha=0.8)
+            plt.title('Keskmine täitmise protsent ajateljel (tunnipõhine keskmine)', fontsize=14, fontweight='bold')
+            plt.xlabel('Kuupäev', fontsize=12)
+            plt.ylabel('Täitmise %', fontsize=12)
+            plt.legend(loc='lower left')
+            plt.grid(True, linestyle='--', alpha=0.5)
+            plt.tight_layout()
+            save_chart(os.path.join(charts_dir, 'execution_timeline.png'), output_png_timeline)
 
-    # 4. Daily error timeline (päevade kaupa, 4 viga ajateljel)
-    daily_plot = daily_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
-    plt.figure(figsize=(14, 6))
-    for col, color in zip(daily_plot.columns, error_colors):
-        plt.plot(daily_df.index, daily_df[col], label=col, color=color, linewidth=2, marker='o', markersize=4)
-    plt.title('Probleemide esinemine päevade lõikes (juhtumite arv, aprill 2026)', fontsize=14, fontweight='bold')
-    plt.xlabel('Kuupäev', fontsize=12)
-    plt.ylabel('Juhtumite arv', fontsize=12)
-    plt.legend(title='Probleemi tüüp')
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.tight_layout()
-    save_chart(os.path.join(charts_dir, 'problems_by_day.png'), output_png_daily_timeline)
+        # 17. [PNG] Vigade esinemine päevade lõikes
+        if 17 in selected_indices:
+            print("Generating daily error timeline...")
+            daily_plot = daily_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
+            plt.figure(figsize=(14, 6))
+            for col, color in zip(daily_plot.columns, error_colors):
+                plt.plot(daily_df.index, daily_df[col], label=col, color=color, linewidth=2, marker='o', markersize=4)
+            plt.title('Probleemide esinemine päevade lõikes (juhtumite arv, aprill 2026)', fontsize=14, fontweight='bold')
+            plt.xlabel('Kuupäev', fontsize=12)
+            plt.ylabel('Juhtumite arv', fontsize=12)
+            plt.legend(title='Probleemi tüüp')
+            plt.grid(True, linestyle='--', alpha=0.5)
+            plt.tight_layout()
+            save_chart(os.path.join(charts_dir, 'problems_by_day.png'), output_png_daily_timeline)
+            
+        # 13. [PNG] Üldine tööolek kestvuse järgi (sektordiagramm)
+        if 13 in selected_indices:
+            print("Generating overall health pie chart...")
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+            
+            health_2_labels = ['Normaalne töö', 'Probleemid kokku']
+            health_2_counts = [overall_durations['Normaalne töö'], overall_durations[error_categories].sum()]
+            health_2_colors = ['#2ecc71', '#e74c3c']
+            ax1.pie(health_2_counts, labels=health_2_labels, autopct='%1.2f%%', startangle=140,
+                    colors=health_2_colors, wedgeprops=dict(edgecolor='white', linewidth=2),
+                    textprops={'fontsize': 12, 'weight': 'bold'})
+            ax1.set_title('Süsteemi üldine tööolek (kestvuse järgi)', fontsize=14, fontweight='bold')
+            
+            health_5_colors = ['#2ecc71', '#f1c40f', '#e74c3c', '#e67e22', '#9b59b6']
+            ax2.pie(overall_durations, labels=overall_durations.index, autopct='%1.2f%%', startangle=140,
+                    colors=health_5_colors, wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                    textprops={'fontsize': 11})
+            ax2.set_title('Kõikide kategooriate osakaal (kestvuse järgi)', fontsize=14, fontweight='bold')
+            
+            plt.tight_layout()
+            save_chart(os.path.join(charts_dir, 'uldine_tervis_pie.png'), output_png_yldine_pie)
 
-    # 5. Overall error share pie chart (% of total error incidents)
-    plt.figure(figsize=(10, 8))
-    error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=90, colors=error_colors,
-                      wedgeprops=dict(edgecolor='white', linewidth=2))
-    plt.title('Probleemide osakaalud kogu perioodi lõikes (ainult vead, juhtumite arv) (aprill 2026)', fontsize=14, fontweight='bold')
-    plt.ylabel('')
-    plt.tight_layout()
-    save_chart(os.path.join(charts_dir, 'error_share_pie.png'), output_png_daily_pie)
-    
-    # 6. Overall health pie chart (Normaalne töö vs problems, and detailed breakdown)
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
-    
-    # Left: 2-slice pie chart (Normaalne töö vs Probleemid kokku)
-    health_2_labels = ['Normaalne töö', 'Probleemid kokku']
-    health_2_counts = [overall_durations['Normaalne töö'], overall_durations[error_categories].sum()]
-    health_2_colors = ['#2ecc71', '#e74c3c']
-    ax1.pie(health_2_counts, labels=health_2_labels, autopct='%1.2f%%', startangle=140,
-            colors=health_2_colors, wedgeprops=dict(edgecolor='white', linewidth=2),
-            textprops={'fontsize': 12, 'weight': 'bold'})
-    ax1.set_title('Süsteemi üldine tööolek (kestvuse järgi)', fontsize=14, fontweight='bold')
-    
-    # Right: 5-slice pie chart (Normaalne töö + 4 errors)
-    health_5_colors = ['#2ecc71', '#f1c40f', '#e74c3c', '#e67e22', '#9b59b6']
-    ax2.pie(overall_durations, labels=overall_durations.index, autopct='%1.2f%%', startangle=140,
-            colors=health_5_colors, wedgeprops=dict(edgecolor='white', linewidth=1.5),
-            textprops={'fontsize': 11})
-    ax2.set_title('Kõikide kategooriate osakaal (kestvuse järgi)', fontsize=14, fontweight='bold')
-    
-    plt.tight_layout()
-    save_chart(os.path.join(charts_dir, 'uldine_tervis_pie.png'), output_png_yldine_pie)
-
-    # 7. Stacked Percentage Bar Chart - Overall health by hour of day
-    plt.figure(figsize=(14, 7))
-    hourly_overall_pct.plot(kind='bar', stacked=True, color=health_5_colors, ax=plt.gca(), width=0.8)
-    plt.title('Süsteemi olekute jaotus tundide lõikes (% ajalisest kestvusest tunnis)', fontsize=14, fontweight='bold')
-    plt.xlabel('Tund (0-23)', fontsize=12)
-    plt.ylabel('Osakaal (%)', fontsize=12)
-    plt.ylim(0, 100)
-    plt.grid(axis='y', linestyle='--', alpha=0.5)
-    plt.legend(title='Olek / Probleem', bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.tight_layout()
-    save_chart(os.path.join(charts_dir, 'uldine_tervis_tundide_kaupa.png'), output_png_yldine_hourly)
-    
-    # --- Optional Day-Specific Analysis (if date_arg is provided) ---
-    if date_arg:
-        print(f"Generating date-specific analysis for: {date_arg}...")
-        df['Kuupäev'] = pd.to_datetime(df['Time']).dt.date
-        available_dates = df['Kuupäev'].astype(str).unique()
-        if date_arg not in available_dates:
-            print(f"Warning: Date {date_arg} not found in dataset. Available dates: {sorted(available_dates)}")
-        else:
+        # 14. [PNG] Üldise tööoleku tunnipõhine jaotus
+        if 14 in selected_indices:
+            print("Generating hourly overall health bar chart...")
+            plt.figure(figsize=(14, 7))
+            health_5_colors = ['#2ecc71', '#f1c40f', '#e74c3c', '#e67e22', '#9b59b6']
+            hourly_overall_pct.plot(kind='bar', stacked=True, color=health_5_colors, ax=plt.gca(), width=0.8)
+            plt.title('Süsteemi olekute jaotus tundide lõikes (% ajalisest kestvusest tunnis)', fontsize=14, fontweight='bold')
+            plt.xlabel('Tund (0-23)', fontsize=12)
+            plt.ylabel('Osakaal (%)', fontsize=12)
+            plt.ylim(0, 100)
+            plt.grid(axis='y', linestyle='--', alpha=0.5)
+            plt.legend(title='Olek / Probleem', bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.tight_layout()
+            save_chart(os.path.join(charts_dir, 'uldine_tervis_tundide_kaupa.png'), output_png_yldine_hourly)
+            
+        # 19. [PNG] Konkreetse päeva tunnipõhine graafik
+        if 19 in selected_indices and date_arg:
+            print(f"Generating date-specific analysis for: {date_arg}...")
             # Filter error episodes for this date
             day_episodes = error_episodes_df[error_episodes_df['Kuupäev'].astype(str) == date_arg]
             
             # Group by hour and category
             day_hourly = day_episodes.groupby(['Tund', 'Üldine olek']).size().unstack(fill_value=0)
-            # Reindex with the 24 hours and the 4 error categories
             day_hourly = day_hourly.reindex(index=range(24), fill_value=0)
             day_hourly = day_hourly.reindex(columns=error_categories, fill_value=0)
             
