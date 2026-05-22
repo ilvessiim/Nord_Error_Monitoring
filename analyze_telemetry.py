@@ -53,38 +53,54 @@ def main(date_arg=None):
         if not date_arg or date_arg.lower() == 'none':
             date_arg = None
             
-    csv_path = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_combined.csv'
+    default_filename = 'raw_telemetry_2ccf67f82f80_combined.csv'
+    downloads_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+    
+    # Locate input file
+    csv_path = os.path.join(downloads_dir, default_filename)
+    if not os.path.exists(csv_path):
+        if os.path.exists(default_filename):
+            csv_path = default_filename
+        else:
+            if date_arg is not None:
+                print(f"Viga: Faili '{default_filename}' ei leitud automaatselt Downloads kaustast ega praegusest kaustast.")
+                sys.exit(1)
+            else:
+                print(f"Faili '{default_filename}' ei leitud automaatselt Downloads kaustast ega praegusest kaustast.")
+                while True:
+                    user_path = input("Palun sisesta sisendandmete (.csv) faili tee: ").strip()
+                    if os.path.exists(user_path):
+                        csv_path = user_path
+                        break
+                    else:
+                        print(f"Viga: Faili '{user_path}' ei eksisteeri. Proovi uuesti.")
     
     # Summary CSV Outputs
-    output_csv_summary = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary.csv'
-    output_csv_stats = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_stats.csv'
-    output_csv_reasons = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_reasons.csv'
-    output_csv_daily = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_errors_by_date.csv'
-    output_csv_yldine_tervis = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_yldine_tervis.csv'
-    output_csv_summary_episodes = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_episoodid.csv'
+    output_csv_summary = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary.csv')
+    output_csv_stats = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary_stats.csv')
+    output_csv_reasons = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary_reasons.csv')
+    output_csv_daily = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary_errors_by_date.csv')
+    output_csv_yldine_tervis = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary_yldine_tervis.csv')
+    output_csv_summary_episodes = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary_episoodid.csv')
 
     # Chart PNG outputs (saved to Downloads)
-    output_png_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_jaotus.png'
-    output_png_hourly = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemid_tundide_kaupa.png'
-    output_png_timeline = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_taitmine_ajateljel.png'
-    output_png_daily_timeline = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemid_paevade_kaupa.png'
-    output_png_yldine_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_uldine_tervis_pie.png'
-    output_png_yldine_hourly = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_uldine_tervis_tundide_kaupa.png'
+    output_png_pie = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_chart_probleemide_jaotus.png')
+    output_png_hourly = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_chart_probleemid_tundide_kaupa.png')
+    output_png_timeline = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_chart_taitmine_ajateljel.png')
+    output_png_daily_timeline = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_chart_probleemid_paevade_kaupa.png')
+    output_png_yldine_pie = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_chart_uldine_tervis_pie.png')
+    output_png_yldine_hourly = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_chart_uldine_tervis_tundide_kaupa.png')
 
     # Separate CSV files for each specific problem category
-    output_csv_soc_korge = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_liiga_korge.csv'
-    output_csv_soc_madal = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_liiga_madal.csv'
-    output_csv_vorgupiirang = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_vorgupiirang.csv'
-    output_csv_osaline_taitmine = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_osaline_taitmine.csv'
-    output_csv_ootamatu_reageering = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_ootamatu_reageering.csv'
-    output_csv_uurimist_vajav = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_uurimist_vajav.csv'
-    output_csv_grid_extremes = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_power_ekstreemne.csv'
+    output_csv_soc_korge = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_soc_liiga_korge.csv')
+    output_csv_soc_madal = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_soc_liiga_madal.csv')
+    output_csv_vorgupiirang = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_vorgupiirang.csv')
+    output_csv_osaline_taitmine = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_osaline_taitmine.csv')
+    output_csv_ootamatu_reageering = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_ootamatu_reageering.csv')
+    output_csv_uurimist_vajav = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_uurimist_vajav.csv')
+    output_csv_grid_extremes = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_grid_power_ekstreemne.csv')
 
-    print("Loading data...")
-    if not os.path.exists(csv_path):
-        print(f"Error: {csv_path} does not exist.")
-        sys.exit(1)
-        
+    print(f"Loading data from {csv_path}...")
     df = pd.read_csv(csv_path)
     print(f"Loaded {len(df)} rows.")
 
@@ -469,17 +485,17 @@ def main(date_arg=None):
 
     # --- Clean up obsolete files ---
     obsolete_files = [
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.xlsx',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_all_errors.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_hourly.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_errors.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_high.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_low.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_limits.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_partial.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_unexpected.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_osakaalud.png'  # Removed redundant chart
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_analyzed.xlsx'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_analyzed.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_all_errors.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary_hourly.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_errors.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_soc_high.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_soc_low.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_grid_limits.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_partial.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_unexpected.csv'),
+        os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_chart_probleemide_osakaalud.png')  # Removed redundant chart
     ]
     for obs_file in obsolete_files:
         if os.path.exists(obs_file):
@@ -624,7 +640,7 @@ def main(date_arg=None):
             plt.tight_layout()
             
             # Save paths
-            output_png_day = f'/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_paevapohine_{date_arg}.png'
+            output_png_day = os.path.join(downloads_dir, f'raw_telemetry_2ccf67f82f80_chart_paevapohine_{date_arg}.png')
             scratch_png_day = os.path.join(charts_dir, f'uldine_tervis_paevapohine_{date_arg}.png')
             save_chart(scratch_png_day, output_png_day)
             print(f"Saved day-specific chart to {output_png_day}")
@@ -632,7 +648,7 @@ def main(date_arg=None):
             # Export day-specific raw error rows to CSV
             day_raw_df = df[df['Kuupäev'].astype(str) == date_arg]
             day_errors = day_raw_df[~day_raw_df['Põhjus'].isin(['Käsk täidetud', 'Käsku ei antud'])]
-            output_csv_day_errors = f'/Users/user/Downloads/raw_telemetry_2ccf67f82f80_vead_{date_arg}.csv'
+            output_csv_day_errors = os.path.join(downloads_dir, f'raw_telemetry_2ccf67f82f80_vead_{date_arg}.csv')
             day_errors.to_csv(output_csv_day_errors, index=False)
             print(f"Saved day-specific error log to {output_csv_day_errors}")
             
