@@ -1,8 +1,28 @@
 import os
 import sys
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
+import subprocess
+
+def install_dependencies():
+    print("Märkasime, et vajalikud teegid (pandas, numpy, matplotlib) puuduvad.")
+    print("Proovime need automaatselt installida...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pandas", "numpy", "matplotlib"])
+        print("Teegid edukalt installitud!\n")
+    except Exception as e:
+        print(f"Viga automaatsel installimisel: {e}")
+        print("Palun installi need käsitsi terminalis, käivitades:")
+        print("  pip install pandas numpy matplotlib")
+        sys.exit(1)
+
+try:
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    install_dependencies()
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
 
 def aggregate_episodes(df_subset):
     if df_subset.empty:
