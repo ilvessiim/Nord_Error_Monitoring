@@ -57,23 +57,37 @@ def main(date_arg=None):
     downloads_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
     
     # Locate input file
-    csv_path = os.path.join(downloads_dir, default_filename)
-    if not os.path.exists(csv_path):
-        if os.path.exists(default_filename):
-            csv_path = default_filename
-        else:
-            if date_arg is not None:
+    if date_arg is not None:
+        # Automated mode: search default locations
+        csv_path = os.path.join(downloads_dir, default_filename)
+        if not os.path.exists(csv_path):
+            if os.path.exists(default_filename):
+                csv_path = default_filename
+            else:
                 print(f"Viga: Faili '{default_filename}' ei leitud automaatselt Downloads kaustast ega praegusest kaustast.")
                 sys.exit(1)
-            else:
-                print(f"Faili '{default_filename}' ei leitud automaatselt Downloads kaustast ega praegusest kaustast.")
-                while True:
-                    user_path = input("Palun sisesta sisendandmete (.csv) faili tee: ").strip()
-                    if os.path.exists(user_path):
-                        csv_path = user_path
-                        break
+    else:
+        # Interactive mode: prompt the user first
+        default_path_display = os.path.join('~/Downloads', default_filename)
+        print(f"Vaikimisi sisendfail: {default_path_display}")
+        while True:
+            user_input = input("Sisesta sisendandmete (.csv) faili tee (vajuta Enter, et kasutada vaikimisi faili): ").strip()
+            if not user_input:
+                csv_path = os.path.join(downloads_dir, default_filename)
+                if not os.path.exists(csv_path):
+                    if os.path.exists(default_filename):
+                        csv_path = default_filename
                     else:
-                        print(f"Viga: Faili '{user_path}' ei eksisteeri. Proovi uuesti.")
+                        print(f"Viga: Vaikimisi faili '{default_filename}' ei leitud Downloads kaustast ega praegusest kaustast. Palun sisesta kehtiv tee.")
+                        continue
+                break
+            else:
+                user_path = os.path.expanduser(user_input)
+                if os.path.exists(user_path):
+                    csv_path = user_path
+                    break
+                else:
+                    print(f"Viga: Faili '{user_input}' ei leitud. Proovi uuesti.")
     
     # Summary CSV Outputs
     output_csv_summary = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary.csv')
