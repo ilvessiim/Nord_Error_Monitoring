@@ -115,6 +115,29 @@ def main(date_arg=None):
                     break
                 else:
                     print(f"Viga: Faili '{user_input}' ei leitud. Palun kontrolli teed ja proovi uuesti.")
+        
+        # Output folder configuration
+        print("\n=== VÄLJUNDKAUSTA SEADISTAMINE ===")
+        print("Palun sisesta kaust, kuhu tulemused salvestada.")
+        print("Näiteid tee sisestamiseks:")
+        print("  - macOS/Linux: /Users/kasutaja/Downloads/tulemused  või  ~/Desktop")
+        print("  - Windows:     C:\\Users\\kasutaja\\Desktop\\tulemused")
+        print(f"\nVaikimisi salvestatakse kausta: {downloads_dir}")
+        print("Vajuta lihtsalt Enter, et kasutada vaikimisi kausta.")
+        print("==================================\n")
+        while True:
+            output_input = input("Sisesta väljundkausta tee: ").strip()
+            if not output_input:
+                break
+            else:
+                user_output_dir = os.path.expanduser(output_input)
+                try:
+                    os.makedirs(user_output_dir, exist_ok=True)
+                    downloads_dir = user_output_dir
+                    break
+                except Exception as e:
+                    print(f"Viga: Kausta '{output_input}' ei saanud luua või kasutada: {e}")
+                    print("Palun proovi uuesti.")
     
     # Summary CSV Outputs
     output_csv_summary = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary.csv')
