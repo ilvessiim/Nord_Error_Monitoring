@@ -12,6 +12,7 @@ def main():
     output_csv_stats = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_stats.csv'
     output_csv_reasons = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_reasons.csv'
     output_csv_daily = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_errors_by_date.csv'
+    output_csv_yldine_tervis = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_yldine_tervis.csv'
 
     # Chart PNG outputs (saved to Downloads)
     output_png_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_jaotus.png'
@@ -19,6 +20,8 @@ def main():
     output_png_timeline = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_taitmine_ajateljel.png'
     output_png_daily_timeline = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemid_paevade_kaupa.png'
     output_png_daily_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_osakaalud.png'
+    output_png_yldine_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_uldine_tervis_pie.png'
+    output_png_yldine_hourly = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_uldine_tervis_tundide_kaupa.png'
 
     # Separate CSV files for each specific problem category
     output_csv_soc_korge = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_liiga_korge.csv'
@@ -128,24 +131,55 @@ def main():
     })
     summary_df.index.name = 'Probleem'
 
+    total_normal = total_rows - total_errors
     stats_df = pd.DataFrame({
         'Näitaja': [
             'Ridade koguarv',
+            'Toimib nagu peab (Normaalne töö)',
             'Vigade koguarv (4 probleemi)',
             'SOC liiga kõrge',
             'SOC liiga madal',
             'Võrgupiirang',
             'Viga - uurimist vajav',
+            'Normaalne töö (%)',
+            'Vigade osakaal koguajast (%)',
         ],
         'Väärtus': [
             total_rows,
+            int(total_normal),
             int(total_errors),
             int(error_counts['SOC liiga kõrge']),
             int(error_counts['SOC liiga madal']),
             int(error_counts['Võrgupiirang']),
             int(error_counts['Viga - uurimist vajav']),
+            round((total_normal / total_rows) * 100, 2),
+            round((total_errors / total_rows) * 100, 2),
         ]
     })
+
+    # --- Generate Overall Health Distribution (all rows) ---
+    print("Generating Overall Health Distribution...")
+    df['Üldine olek'] = df['Põhjus'].apply(lambda x: 'Normaalne töö' if x in ['Käsk täidetud', 'Käsku ei antud'] else x)
+    overall_categories = [
+        'Normaalne töö',
+        'Võrgupiirang',
+        'SOC liiga kõrge',
+        'SOC liiga madal',
+        'Viga - uurimist vajav'
+    ]
+    overall_counts = df['Üldine olek'].value_counts().reindex(overall_categories, fill_value=0)
+    overall_pct = (overall_counts / total_rows) * 100
+
+    overall_df = pd.DataFrame({
+        'Kogus (Ridade arv)': overall_counts,
+        'Osakaal koguajast (%)': overall_pct.round(2)
+    })
+    overall_df.index.name = 'Kategooria'
+
+    # Hourly overall health analysis
+    hourly_overall = df.groupby(['Tund', 'Üldine olek']).size().unstack(fill_value=0)
+    hourly_overall = hourly_overall.reindex(columns=overall_categories, fill_value=0)
+    hourly_overall_pct = hourly_overall.div(hourly_overall.sum(axis=1), axis=0) * 100
 
     # --- Hourly Analysis (only 4 core errors) ---
     print("Generating Hourly Analysis...")
@@ -176,7 +210,9 @@ def main():
     with open(output_csv_summary, 'w', encoding='utf-8') as f:
         f.write("ÜLDINE STATISTIKA\n")
         stats_df.to_csv(f, index=False)
-        f.write("\nPROBLEEMIDE JAOTUS (ainult 4 viga)\n")
+        f.write("\nÜLDINE JAOTUS KOGUAJAST\n")
+        overall_df.to_csv(f, index=True)
+        f.write("\nPROBLEEMIDE JAOTUS (ainult 4 viga, % vigadest)\n")
         summary_df.to_csv(f, index=True)
         f.write("\nTUNNIPÕHINE ANALÜÜS (ainult 4 viga)\n")
         hourly_df.reset_index().to_csv(f, index=False)
@@ -186,6 +222,9 @@ def main():
 
     print(f"Writing reasons to CSV: {output_csv_reasons}...")
     summary_df.to_csv(output_csv_reasons, index=True)
+
+    print(f"Writing overall health summary to CSV: {output_csv_yldine_tervis}...")
+    overall_df.to_csv(output_csv_yldine_tervis, index=True)
 
     # --- Daily error breakdown ---
     print("Generating daily error breakdown...")
@@ -291,13 +330,49 @@ def main():
     plt.figure(figsize=(10, 8))
     error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=90, colors=error_colors,
                       wedgeprops=dict(edgecolor='white', linewidth=2))
-    plt.title('Probleemide osakaalud kogu perioodi lõikes (aprill 2026)', fontsize=14, fontweight='bold')
+    plt.title('Probleemide osakaalud kogu perioodi lõikes (ainult vead) (aprill 2026)', fontsize=14, fontweight='bold')
     plt.ylabel('')
     plt.tight_layout()
     save_chart(os.path.join(charts_dir, 'error_share_pie.png'), output_png_daily_pie)
     
+    # 6. Overall health pie chart (Normaalne töö vs problems, and detailed breakdown)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+    
+    # Left: 2-slice pie chart (Normaalne töö vs Probleemid kokku)
+    health_2_labels = ['Normaalne töö', 'Probleemid kokku']
+    health_2_counts = [total_normal, total_errors]
+    health_2_colors = ['#2ecc71', '#e74c3c']
+    ax1.pie(health_2_counts, labels=health_2_labels, autopct='%1.2f%%', startangle=140,
+            colors=health_2_colors, wedgeprops=dict(edgecolor='white', linewidth=2),
+            textprops={'fontsize': 12, 'weight': 'bold'})
+    ax1.set_title('Süsteemi üldine tööolek koguajast', fontsize=14, fontweight='bold')
+    
+    # Right: 5-slice pie chart (Normaalne töö + 4 errors)
+    health_5_colors = ['#2ecc71', '#f1c40f', '#e74c3c', '#e67e22', '#9b59b6']
+    ax2.pie(overall_counts, labels=overall_counts.index, autopct='%1.2f%%', startangle=140,
+            colors=health_5_colors, wedgeprops=dict(edgecolor='white', linewidth=1.5),
+            textprops={'fontsize': 11})
+    ax2.set_title('Kõikide kategooriate osakaal koguajast', fontsize=14, fontweight='bold')
+    
+    plt.tight_layout()
+    save_chart(os.path.join(charts_dir, 'uldine_tervis_pie.png'), output_png_yldine_pie)
+
+    # 7. Stacked Percentage Bar Chart - Overall health by hour of day
+    plt.figure(figsize=(14, 7))
+    hourly_overall_pct.plot(kind='bar', stacked=True, color=health_5_colors, ax=plt.gca(), width=0.8)
+    plt.title('Süsteemi olekute jaotus tundide lõikes (% koguajast tunnis)', fontsize=14, fontweight='bold')
+    plt.xlabel('Tund (0-23)', fontsize=12)
+    plt.ylabel('Osakaal (%)', fontsize=12)
+    plt.ylim(0, 100)
+    plt.grid(axis='y', linestyle='--', alpha=0.5)
+    plt.legend(title='Olek / Probleem', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    save_chart(os.path.join(charts_dir, 'uldine_tervis_tundide_kaupa.png'), output_png_yldine_hourly)
+    
     print("\n--- ANALYSIS COMPLETED ---")
     print(stats_df.to_string(index=False))
+    print("\nÜldine olekute jaotus koguajast:")
+    print(overall_df)
     print("\nProbleemide jaotus (4 viga, % vigade koguhulgast):")
     print(summary_df)
 
