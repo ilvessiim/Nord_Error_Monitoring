@@ -68,17 +68,24 @@ def main(date_arg=None):
                 sys.exit(1)
     else:
         # Interactive mode: prompt the user first
-        default_path_display = os.path.join('~/Downloads', default_filename)
-        print(f"Vaikimisi sisendfail: {default_path_display}")
+        print("\n=== SISENDFAILI SEADISTAMINE ===")
+        print("Palun sisesta oma telemeetria CSV faili tee.")
+        print("Näiteid tee sisestamiseks:")
+        print("  - macOS/Linux: /Users/kasutaja/Downloads/raw_telemetry.csv  või  ~/Downloads/raw_telemetry.csv")
+        print("  - Windows:     C:\\Users\\kasutaja\\Downloads\\raw_telemetry.csv")
+        print(f"\nVaikimisi otsitakse faili: {os.path.join('~/Downloads', default_filename)}")
+        print("Vajuta lihtsalt Enter, et kasutada vaikimisi faili.")
+        print("================================\n")
         while True:
-            user_input = input("Sisesta sisendandmete (.csv) faili tee (vajuta Enter, et kasutada vaikimisi faili): ").strip()
+            user_input = input("Sisesta faili tee: ").strip()
             if not user_input:
                 csv_path = os.path.join(downloads_dir, default_filename)
                 if not os.path.exists(csv_path):
                     if os.path.exists(default_filename):
                         csv_path = default_filename
                     else:
-                        print(f"Viga: Vaikimisi faili '{default_filename}' ei leitud Downloads kaustast ega praegusest kaustast. Palun sisesta kehtiv tee.")
+                        print(f"\nViga: Vaikimisi faili '{default_filename}' ei leitud Downloads kaustast ega praegusest kaustast.")
+                        print("Palun sisesta kehtiv tee oma failini.")
                         continue
                 break
             else:
@@ -87,7 +94,7 @@ def main(date_arg=None):
                     csv_path = user_path
                     break
                 else:
-                    print(f"Viga: Faili '{user_input}' ei leitud. Proovi uuesti.")
+                    print(f"Viga: Faili '{user_input}' ei leitud. Palun kontrolli teed ja proovi uuesti.")
     
     # Summary CSV Outputs
     output_csv_summary = os.path.join(downloads_dir, 'raw_telemetry_2ccf67f82f80_summary.csv')
