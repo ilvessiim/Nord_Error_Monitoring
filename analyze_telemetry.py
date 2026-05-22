@@ -97,55 +97,55 @@ def main():
         'Ootamatu reageering': 'Käsku ei antud'
     })
 
-    # --- Generate Summary Statistics (using mapped reasons) ---
+    # --- Generate Summary Statistics (only 4 core errors) ---
     print("Generating Summary Statistics...")
     total_rows = len(df)
-    reason_counts = df['Põhjus'].value_counts()
-    
-    # Ensure all 6 target categories are present in the counts, even if 0
-    target_categories = [
-        'Käsk täidetud',
-        'Käsku ei antud',
+
+    # Only the 4 core error categories
+    error_categories = [
         'SOC liiga kõrge',
         'SOC liiga madal',
         'Võrgupiirang',
         'Viga - uurimist vajav'
     ]
-    reason_counts = reason_counts.reindex(target_categories, fill_value=0)
-    reason_pct = (reason_counts / total_rows) * 100
-    
+    error_counts = df['Põhjus'].value_counts().reindex(error_categories, fill_value=0)
+    total_errors = error_counts.sum()
+
+    # Percentages calculated from total error count only
+    error_pct = (error_counts / total_errors) * 100
+
     summary_df = pd.DataFrame({
-        'Kogus (Ridade arv)': reason_counts,
-        'Osakaal (%)': reason_pct
+        'Kogus (Ridade arv)': error_counts,
+        'Osakaal vigadest (%)': error_pct
     })
-    summary_df.index.name = 'Põhjus'
-    
-    avg_execution_overall = df['Täitmise %'].mean()
-    avg_execution_when_command = df.loc[df['ESS Plan'] != 0, 'Täitmise %'].mean()
-    
+    summary_df.index.name = 'Probleem'
+
     stats_df = pd.DataFrame({
         'Näitaja': [
-            'Ridade koguarv', 
-            'Keskmine täitmise % (kõik read)', 
-            'Keskmine täitmise % (kui anti käsk)'
+            'Ridade koguarv',
+            'Vigade koguarv (4 probleemi)',
+            'SOC liiga kõrge',
+            'SOC liiga madal',
+            'Võrgupiirang',
+            'Viga - uurimist vajav',
         ],
         'Väärtus': [
-            total_rows, 
-            avg_execution_overall, 
-            avg_execution_when_command
+            total_rows,
+            int(total_errors),
+            int(error_counts['SOC liiga kõrge']),
+            int(error_counts['SOC liiga madal']),
+            int(error_counts['Võrgupiirang']),
+            int(error_counts['Viga - uurimist vajav']),
         ]
     })
 
-    # --- Hourly Analysis (using mapped reasons) ---
+    # --- Hourly Analysis (only 4 core errors) ---
     print("Generating Hourly Analysis...")
     hourly_groups = df.groupby('Tund')
-    
+
     hourly_df = pd.DataFrame(index=range(24))
     hourly_df.index.name = 'Tund'
-    
-    hourly_df['Käskude arv'] = hourly_groups['ESS Plan'].apply(lambda s: (s != 0).sum())
-    hourly_df['Keskmine täitmise %'] = hourly_groups['Täitmise %'].mean()
-    
+
     hourly_df['SOC liiga kõrge'] = hourly_groups['Põhjus'].apply(
         lambda s: (s == 'SOC liiga kõrge').sum()
     )
@@ -158,20 +158,24 @@ def main():
     hourly_df['Viga - uurimist vajav'] = hourly_groups['Põhjus'].apply(
         lambda s: (s == 'Viga - uurimist vajav').sum()
     )
+    hourly_df['Vigade koguarv tunnis'] = (
+        hourly_df['SOC liiga kõrge'] + hourly_df['SOC liiga madal'] +
+        hourly_df['Võrgupiirang'] + hourly_df['Viga - uurimist vajav']
+    )
 
     # --- Write Outputs to Downloads ---
     print(f"Writing combined summary to CSV: {output_csv_summary}...")
     with open(output_csv_summary, 'w', encoding='utf-8') as f:
-        f.write("KOKKUVÕTE NÄITAJAD\n")
+        f.write("ÜLDINE STATISTIKA\n")
         stats_df.to_csv(f, index=False)
-        f.write("\nPÕHJUSTE JAOTUS\n")
+        f.write("\nPROBLEEMIDE JAOTUS (ainult 4 viga)\n")
         summary_df.to_csv(f, index=True)
-        f.write("\nTUNNIPÕHINE ANALÜÜS\n")
+        f.write("\nTUNNIPÕHINE ANALÜÜS (ainult 4 viga)\n")
         hourly_df.reset_index().to_csv(f, index=False)
-        
+
     print(f"Writing stats to CSV: {output_csv_stats}...")
     stats_df.to_csv(output_csv_stats, index=False)
-    
+
     print(f"Writing reasons to CSV: {output_csv_reasons}...")
     summary_df.to_csv(output_csv_reasons, index=True)
 
@@ -201,29 +205,29 @@ def main():
     charts_dir = '/Users/user/.gemini/antigravity-ide/scratch'
     os.makedirs(charts_dir, exist_ok=True)
     
-    # 1. Pie Chart of reason distribution
+    # 1. Pie Chart - only 4 core errors, percentages from error total
     plt.figure(figsize=(10, 8))
-    colors = ['#2ecc71', '#95a5a6', '#e74c3c', '#e67e22', '#f1c40f', '#9b59b6']
-    reason_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=colors)
-    plt.title('Põhjuste jaotus (aprill 2026)', fontsize=14, fontweight='bold')
+    colors_pie = ['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6']
+    error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=colors_pie)
+    plt.title('Probleemide jaotus (aprill 2026)', fontsize=14, fontweight='bold')
     plt.ylabel('')
     plt.tight_layout()
     pie_path = os.path.join(charts_dir, 'reason_distribution.png')
     plt.savefig(pie_path, dpi=150)
     plt.close()
-    
-    # 2. Bar Chart of problems by hour
+
+    # 2. Bar Chart - only 4 core errors by hour
     plt.figure(figsize=(12, 6))
     hourly_problems = hourly_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
     hourly_problems.plot(
-        kind='bar', 
-        stacked=True, 
-        color=['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6'], 
+        kind='bar',
+        stacked=True,
+        color=['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6'],
         ax=plt.gca()
     )
     plt.title('Probleemide esinemine tundide lõikes (aprill 2026)', fontsize=14, fontweight='bold')
     plt.xlabel('Tund (0-23)', fontsize=12)
-    plt.ylabel('Ridade arv', fontsize=12)
+    plt.ylabel('Probleemide arv', fontsize=12)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     plt.legend(title='Probleemi tüüp')
     plt.tight_layout()
@@ -250,7 +254,7 @@ def main():
     
     print("\n--- ANALYSIS COMPLETED ---")
     print(stats_df.to_string(index=False))
-    print("\nPõhjuste jaotus:")
+    print("\nProbleemide jaotus (4 viga, % vigade koguhulgast):")
     print(summary_df)
 
 if __name__ == '__main__':
