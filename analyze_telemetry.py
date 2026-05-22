@@ -44,9 +44,10 @@ def main():
     # Priority 6: Osaline täitmine (50% <= Execution % < 95%)
     mask_partial = (df['Täitmise %'] >= 50) & (df['Täitmise %'] < 95)
     df.loc[mask_partial, 'Põhjus'] = "Osaline täitmine"
-    
-    # Priority 5: Võrgupiirang (|Grid Power| >= 47.5 kW)
-    mask_grid = df['Grid Power'].abs() >= 47.5
+    # Priority 5: Võrgupiirang (Expected grid power exceeds 50 kW grid connection capacity)
+    # Expected Grid Power = Grid Power + ESS Power - ESS Plan
+    expected_grid = df['Grid Power'] + df['ESS Power'] - df['ESS Plan']
+    mask_grid = (expected_grid.abs() >= 50) | (df['Grid Power'].abs() >= 50)
     df.loc[mask_grid, 'Põhjus'] = "Võrgupiirang"
     
     # Priority 4: SOC liiga kõrge laadimiseks (SOC >= 90% AND ESS Plan < 0)
