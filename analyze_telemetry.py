@@ -13,6 +13,9 @@ def main():
     output_csv_summary = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary.csv'
     output_csv_errors = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_errors.csv'
     output_csv_all_errors = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_all_errors.csv'
+    output_csv_soc_high = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_high.csv'
+    output_csv_soc_low = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_low.csv'
+    output_csv_grid_limit = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_limits.csv'
     
     print("Loading data...")
     if not os.path.exists(csv_path):
@@ -155,10 +158,19 @@ def main():
     print(f"Writing detailed output to CSV: {output_csv_detail}...")
     df.to_csv(output_csv_detail, index=False)
     
-    print(f"Writing error output to CSV: {output_csv_errors}...")
+    print(f"Writing unexplained errors output to CSV: {output_csv_errors}...")
     errors_df.to_csv(output_csv_errors, index=False)
     
-    print(f"Writing all requested errors to CSV: {output_csv_all_errors}...")
+    print(f"Writing SOC too high errors to CSV: {output_csv_soc_high}...")
+    df[df['Põhjus'] == 'SOC liiga kõrge laadimiseks'].sort_values('Time').to_csv(output_csv_soc_high, index=False)
+    
+    print(f"Writing SOC too low errors to CSV: {output_csv_soc_low}...")
+    df[df['Põhjus'] == 'SOC liiga madal tühjendamiseks'].sort_values('Time').to_csv(output_csv_soc_low, index=False)
+    
+    print(f"Writing Grid Limit constraint errors to CSV: {output_csv_grid_limit}...")
+    df[df['Põhjus'] == 'Võrgupiirang'].sort_values('Time').to_csv(output_csv_grid_limit, index=False)
+    
+    print(f"Writing all requested errors combined to CSV: {output_csv_all_errors}...")
     all_errors_df.to_csv(output_csv_all_errors, index=False)
     
     print(f"Writing combined summary to CSV: {output_csv_summary}...")
