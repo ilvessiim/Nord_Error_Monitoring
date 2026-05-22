@@ -6,12 +6,11 @@ import matplotlib.pyplot as plt
 
 def main():
     csv_path = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_combined.csv'
-    output_excel = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.xlsx'
     
-    # CSV Outputs
-    output_csv_detail = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.csv'
+    # Summary CSV Outputs
     output_csv_summary = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary.csv'
-    output_csv_all_errors = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_all_errors.csv'
+    output_csv_stats = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_stats.csv'
+    output_csv_reasons = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_reasons.csv'
     
     # Separate CSV files for each specific problem category
     output_csv_soc_korge = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_liiga_korge.csv'
@@ -21,7 +20,6 @@ def main():
     output_csv_ootamatu_reageering = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_ootamatu_reageering.csv'
     output_csv_uurimist_vajav = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_uurimist_vajav.csv'
 
-    
     print("Loading data...")
     if not os.path.exists(csv_path):
         print(f"Error: {csv_path} does not exist.")
@@ -49,8 +47,8 @@ def main():
     # Priority 6: Osaline täitmine (50% <= Execution % < 95%)
     mask_partial = (df['Täitmise %'] >= 50) & (df['Täitmise %'] < 95)
     df.loc[mask_partial, 'Põhjus'] = "Osaline täitmine"
+    
     # Priority 5: Võrgupiirang (Expected grid power exceeds 50 kW grid connection capacity)
-    # Expected Grid Power = Grid Power + ESS Power - ESS Plan
     expected_grid = df['Grid Power'] + df['ESS Power'] - df['ESS Plan']
     mask_grid = (expected_grid.abs() >= 50) | (df['Grid Power'].abs() >= 50)
     df.loc[mask_grid, 'Põhjus'] = "Võrgupiirang"
@@ -74,17 +72,46 @@ def main():
     mask_ok = df['Täitmise %'] >= 95
     df.loc[mask_ok, 'Põhjus'] = "Käsk täidetud"
 
-    # Clean up temporary datetime column
+    # Save datetime column for plotting later before cleanup
+    time_dt_series = df['Time_dt']
     df = df.drop(columns=['Time_dt'])
     
     # Reorder columns
     cols = ['Time', 'ESS SoC', 'ESS Plan', 'PV Power', 'ESS Power', 'Grid Power', 'Täitmise %', 'Põhjus', 'Tund']
     df = df[cols]
 
-    # 4. Generate Summary Statistics
+    # --- Write Separate CSV Files (using detailed classifications) ---
+    print("Writing separate CSV files for each category...")
+    
+    df[df['Põhjus'] == 'SOC liiga kõrge'].sort_values('Time').to_csv(output_csv_soc_korge, index=False)
+    df[df['Põhjus'] == 'SOC liiga madal'].sort_values('Time').to_csv(output_csv_soc_madal, index=False)
+    df[df['Põhjus'] == 'Võrgupiirang'].sort_values('Time').to_csv(output_csv_vorgupiirang, index=False)
+    df[df['Põhjus'] == 'Osaline täitmine'].sort_values('Time').to_csv(output_csv_osaline_taitmine, index=False)
+    df[df['Põhjus'] == 'Ootamatu reageering'].sort_values('Time').to_csv(output_csv_ootamatu_reageering, index=False)
+    df[df['Põhjus'] == 'Viga - uurimist vajav'].sort_values('Time').to_csv(output_csv_uurimist_vajav, index=False)
+
+    # --- Map Non-Critical Categories for summaries and charts ---
+    print("Merging non-critical classifications (Osaline täitmine -> Käsk täidetud, Ootamatu reageering -> Käsku ei antud)...")
+    df['Põhjus'] = df['Põhjus'].replace({
+        'Osaline täitmine': 'Käsk täidetud',
+        'Ootamatu reageering': 'Käsku ei antud'
+    })
+
+    # --- Generate Summary Statistics (using mapped reasons) ---
     print("Generating Summary Statistics...")
     total_rows = len(df)
     reason_counts = df['Põhjus'].value_counts()
+    
+    # Ensure all 6 target categories are present in the counts, even if 0
+    target_categories = [
+        'Käsk täidetud',
+        'Käsku ei antud',
+        'SOC liiga kõrge',
+        'SOC liiga madal',
+        'Võrgupiirang',
+        'Viga - uurimist vajav'
+    ]
+    reason_counts = reason_counts.reindex(target_categories, fill_value=0)
     reason_pct = (reason_counts / total_rows) * 100
     
     summary_df = pd.DataFrame({
@@ -109,98 +136,30 @@ def main():
         ]
     })
 
-    # 5. Hourly Analysis
+    # --- Hourly Analysis (using mapped reasons) ---
     print("Generating Hourly Analysis...")
     hourly_groups = df.groupby('Tund')
     
     hourly_df = pd.DataFrame(index=range(24))
     hourly_df.index.name = 'Tund'
     
-    # Fix pandas future deprecation warnings by selecting specific column
     hourly_df['Käskude arv'] = hourly_groups['ESS Plan'].apply(lambda s: (s != 0).sum())
     hourly_df['Keskmine täitmise %'] = hourly_groups['Täitmise %'].mean()
     
-    hourly_df['SOC probleemid'] = hourly_groups['Põhjus'].apply(
-        lambda s: s.str.startswith('SOC liiga').sum()
+    hourly_df['SOC liiga kõrge'] = hourly_groups['Põhjus'].apply(
+        lambda s: (s == 'SOC liiga kõrge').sum()
     )
-    hourly_df['Võrgupiirangud'] = hourly_groups['Põhjus'].apply(
+    hourly_df['SOC liiga madal'] = hourly_groups['Põhjus'].apply(
+        lambda s: (s == 'SOC liiga madal').sum()
+    )
+    hourly_df['Võrgupiirang'] = hourly_groups['Põhjus'].apply(
         lambda s: (s == 'Võrgupiirang').sum()
     )
-    hourly_df['Vead'] = hourly_groups['Põhjus'].apply(
+    hourly_df['Viga - uurimist vajav'] = hourly_groups['Põhjus'].apply(
         lambda s: (s == 'Viga - uurimist vajav').sum()
     )
 
-    # 6. Filter and Export Errors
-    print("Filtering errors...")
-    errors_df = df[df['Põhjus'] == 'Viga - uurimist vajav'].sort_values('Time')
-    print(f"Found {len(errors_df)} error rows.")
-    
-    all_errors_list = [
-        "SOC liiga kõrge",
-        "SOC liiga madal",
-        "Võrgupiirang",
-        "Viga - uurimist vajav"
-    ]
-    all_errors_df = df[df['Põhjus'].isin(all_errors_list)].sort_values('Time')
-    print(f"Found {len(all_errors_df)} total rows matching requested error categories.")
-
-    # 7. Write to Excel using openpyxl
-    print(f"Writing to Excel file: {output_excel}...")
-    with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='Õige SOC', index=False)
-        stats_df.to_excel(writer, sheet_name='Kokkuvõte', startrow=0, index=False)
-        
-        workbook = writer.book
-        worksheet = writer.sheets['Kokkuvõte']
-        worksheet.cell(row=6, column=1, value="Põhjuste jaotus:")
-        summary_df.to_excel(writer, sheet_name='Kokkuvõte', startrow=6, index=True)
-        
-        worksheet.cell(row=18, column=1, value="Tunnipõhine analüüs:")
-        hourly_df.reset_index().to_excel(writer, sheet_name='Kokkuvõte', startrow=18, index=False)
-        errors_df.to_excel(writer, sheet_name='Vead', index=False)
-        
-    # Cleanup old confusing CSV files if they exist
-    old_files = [
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_errors.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_high.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_low.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_limits.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_partial.csv',
-        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_unexpected.csv'
-    ]
-    for old_file in old_files:
-        if os.path.exists(old_file):
-            try:
-                os.remove(old_file)
-                print(f"Removed old file: {old_file}")
-            except Exception as e:
-                print(f"Failed to remove {old_file}: {e}")
-
-    # 8. Write to CSV files for easy local viewing on Macbook
-    print(f"Writing detailed output to CSV: {output_csv_detail}...")
-    df.to_csv(output_csv_detail, index=False)
-    
-    print(f"Writing unexplained errors ('Viga - uurimist vajav') to CSV: {output_csv_uurimist_vajav}...")
-    errors_df.to_csv(output_csv_uurimist_vajav, index=False)
-    
-    print(f"Writing 'SOC liiga kõrge' errors to CSV: {output_csv_soc_korge}...")
-    df[df['Põhjus'] == 'SOC liiga kõrge'].sort_values('Time').to_csv(output_csv_soc_korge, index=False)
-    
-    print(f"Writing 'SOC liiga madal' errors to CSV: {output_csv_soc_madal}...")
-    df[df['Põhjus'] == 'SOC liiga madal'].sort_values('Time').to_csv(output_csv_soc_madal, index=False)
-    
-    print(f"Writing 'Võrgupiirang' errors to CSV: {output_csv_vorgupiirang}...")
-    df[df['Põhjus'] == 'Võrgupiirang'].sort_values('Time').to_csv(output_csv_vorgupiirang, index=False)
-    
-    print(f"Writing 'Osaline täitmine' errors to CSV: {output_csv_osaline_taitmine}...")
-    df[df['Põhjus'] == 'Osaline täitmine'].sort_values('Time').to_csv(output_csv_osaline_taitmine, index=False)
-    
-    print(f"Writing 'Ootamatu reageering' errors to CSV: {output_csv_ootamatu_reageering}...")
-    df[df['Põhjus'] == 'Ootamatu reageering'].sort_values('Time').to_csv(output_csv_ootamatu_reageering, index=False)
-    
-    print(f"Writing all requested errors combined to CSV: {output_csv_all_errors}...")
-    all_errors_df.to_csv(output_csv_all_errors, index=False)
-    
+    # --- Write Outputs to Downloads ---
     print(f"Writing combined summary to CSV: {output_csv_summary}...")
     with open(output_csv_summary, 'w', encoding='utf-8') as f:
         f.write("KOKKUVÕTE NÄITAJAD\n")
@@ -210,21 +169,42 @@ def main():
         f.write("\nTUNNIPÕHINE ANALÜÜS\n")
         hourly_df.reset_index().to_csv(f, index=False)
         
-    # Also write separate clean CSVs for easy importing into Numbers/Excel on MacBook
-    stats_df.to_csv('/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_stats.csv', index=False)
-    summary_df.to_csv('/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_reasons.csv', index=True)
-    hourly_df.reset_index().to_csv('/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_hourly.csv', index=False)
+    print(f"Writing stats to CSV: {output_csv_stats}...")
+    stats_df.to_csv(output_csv_stats, index=False)
+    
+    print(f"Writing reasons to CSV: {output_csv_reasons}...")
+    summary_df.to_csv(output_csv_reasons, index=True)
 
-    print("Excel and CSV files created successfully.")
+    # --- Clean up obsolete files ---
+    obsolete_files = [
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.xlsx',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_all_errors.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_hourly.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_errors.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_high.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_low.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_grid_limits.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_partial.csv',
+        '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_unexpected.csv'
+    ]
+    for obs_file in obsolete_files:
+        if os.path.exists(obs_file):
+            try:
+                os.remove(obs_file)
+                print(f"Removed obsolete file: {obs_file}")
+            except Exception as e:
+                print(f"Failed to remove {obs_file}: {e}")
 
-    # 9. Visualizations
+    # --- Generate Visualizations ---
     print("Generating visualizations...")
     charts_dir = '/Users/user/.gemini/antigravity-ide/scratch'
     os.makedirs(charts_dir, exist_ok=True)
     
-    # Pie Chart
+    # 1. Pie Chart of reason distribution
     plt.figure(figsize=(10, 8))
-    reason_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=plt.cm.Paired(np.linspace(0, 1, len(reason_counts))))
+    colors = ['#2ecc71', '#95a5a6', '#e74c3c', '#e67e22', '#f1c40f', '#9b59b6']
+    reason_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=colors)
     plt.title('Põhjuste jaotus (aprill 2026)', fontsize=14, fontweight='bold')
     plt.ylabel('')
     plt.tight_layout()
@@ -232,21 +212,27 @@ def main():
     plt.savefig(pie_path, dpi=150)
     plt.close()
     
-    # Bar Chart
+    # 2. Bar Chart of problems by hour
     plt.figure(figsize=(12, 6))
-    hourly_problems = hourly_df[['SOC probleemid', 'Võrgupiirangud', 'Vead']]
-    hourly_problems.plot(kind='bar', stacked=True, color=['#e74c3c', '#f39c12', '#9b59b6'], ax=plt.gca())
-    plt.title('Probleemide esinemine tundide lõikes', fontsize=14, fontweight='bold')
+    hourly_problems = hourly_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
+    hourly_problems.plot(
+        kind='bar', 
+        stacked=True, 
+        color=['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6'], 
+        ax=plt.gca()
+    )
+    plt.title('Probleemide esinemine tundide lõikes (aprill 2026)', fontsize=14, fontweight='bold')
     plt.xlabel('Tund (0-23)', fontsize=12)
     plt.ylabel('Ridade arv', fontsize=12)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.legend(title='Probleemi tüüp')
     plt.tight_layout()
     bar_path = os.path.join(charts_dir, 'problems_by_hour.png')
     plt.savefig(bar_path, dpi=150)
     plt.close()
 
-    # Timeline Chart
-    df['Time_dt'] = pd.to_datetime(df['Time'])
+    # 3. Timeline Chart
+    df['Time_dt'] = time_dt_series
     hourly_ts = df.set_index('Time_dt').resample('h')['Täitmise %'].mean()
     
     plt.figure(figsize=(14, 6))
