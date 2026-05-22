@@ -4,7 +4,55 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+def aggregate_episodes(df_subset):
+    if df_subset.empty:
+        cols = [
+            'Episoodi ID', 'Põhjus', 'Algusaeg', 'Lõpuaeg', 
+            'Kestvus (sekundit)', 'Kestvus (minutit)', 
+            'ESS SoC (keskmine)', 'ESS Plan (keskmine)', 
+            'PV Power (keskmine)', 'ESS Power (keskmine)', 
+            'Grid Power (keskmine)', 'Täitmise % (keskmine)'
+        ]
+        return pd.DataFrame(columns=cols)
+    
+    agg_df = df_subset.groupby('Episoodi ID').agg(
+        Põhjus=('Põhjus', 'first'),
+        Algusaeg=('Time', 'first'),
+        Lõpuaeg=('Time', 'last'),
+        Kestvus_sekundit=('Episoodi kestvus (sekundit)', 'first'),
+        Kestvus_minutit=('Episoodi kestvus (minutit)', 'first'),
+        ESS_SoC_keskmine=('ESS SoC', 'mean'),
+        ESS_Plan_keskmine=('ESS Plan', 'mean'),
+        PV_Power_keskmine=('PV Power', 'mean'),
+        ESS_Power_keskmine=('ESS Power', 'mean'),
+        Grid_Power_keskmine=('Grid Power', 'mean'),
+        Taitmise_pct_keskmine=('Täitmise %', 'mean')
+    ).reset_index()
+    
+    agg_df = agg_df.rename(columns={
+        'Kestvus_sekundit': 'Kestvus (sekundit)',
+        'Kestvus_minutit': 'Kestvus (minutit)',
+        'ESS_SoC_keskmine': 'ESS SoC (keskmine)',
+        'ESS_Plan_keskmine': 'ESS Plan (keskmine)',
+        'PV_Power_keskmine': 'PV Power (keskmine)',
+        'ESS_Power_keskmine': 'ESS Power (keskmine)',
+        'Grid_Power_keskmine': 'Grid Power (keskmine)',
+        'Taitmise_pct_keskmine': 'Täitmise % (keskmine)'
+    })
+    
+    # Round mean values
+    for col in ['ESS SoC (keskmine)', 'ESS Plan (keskmine)', 'PV Power (keskmine)', 
+                'ESS Power (keskmine)', 'Grid Power (keskmine)', 'Täitmise % (keskmine)']:
+        agg_df[col] = agg_df[col].round(1)
+        
+    return agg_df.sort_values('Episoodi ID').reset_index(drop=True)
+
 def main(date_arg=None):
+    if date_arg:
+        date_arg = date_arg.strip()
+        if not date_arg or date_arg.lower() == 'none':
+            date_arg = None
+            
     csv_path = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_combined.csv'
     
     # Summary CSV Outputs
@@ -116,15 +164,15 @@ def main(date_arg=None):
     ]
     df = df[cols]
 
-    # --- Write Separate CSV Files (using detailed classifications) ---
-    print("Writing separate CSV files for each category...")
+    # --- Write Separate CSV Files (using detailed classifications, aggregated by episode) ---
+    print("Writing separate CSV files for each category (aggregated by episode)...")
     
-    df[df['Põhjus'] == 'SOC liiga kõrge'].sort_values('Time').to_csv(output_csv_soc_korge, index=False)
-    df[df['Põhjus'] == 'SOC liiga madal'].sort_values('Time').to_csv(output_csv_soc_madal, index=False)
-    df[df['Põhjus'] == 'Võrgupiirang'].sort_values('Time').to_csv(output_csv_vorgupiirang, index=False)
-    df[df['Põhjus'] == 'Osaline täitmine'].sort_values('Time').to_csv(output_csv_osaline_taitmine, index=False)
-    df[df['Põhjus'] == 'Ootamatu reageering'].sort_values('Time').to_csv(output_csv_ootamatu_reageering, index=False)
-    df[df['Põhjus'] == 'Viga - uurimist vajav'].sort_values('Time').to_csv(output_csv_uurimist_vajav, index=False)
+    aggregate_episodes(df[df['Põhjus'] == 'SOC liiga kõrge']).to_csv(output_csv_soc_korge, index=False)
+    aggregate_episodes(df[df['Põhjus'] == 'SOC liiga madal']).to_csv(output_csv_soc_madal, index=False)
+    aggregate_episodes(df[df['Põhjus'] == 'Võrgupiirang']).to_csv(output_csv_vorgupiirang, index=False)
+    aggregate_episodes(df[df['Põhjus'] == 'Osaline täitmine']).to_csv(output_csv_osaline_taitmine, index=False)
+    aggregate_episodes(df[df['Põhjus'] == 'Ootamatu reageering']).to_csv(output_csv_ootamatu_reageering, index=False)
+    aggregate_episodes(df[df['Põhjus'] == 'Viga - uurimist vajav']).to_csv(output_csv_uurimist_vajav, index=False)
 
     # --- Map Non-Critical Categories for summaries and charts ---
     print("Merging non-critical classifications (Osaline täitmine -> Käsk täidetud, Ootamatu reageering -> Käsku ei antud)...")
