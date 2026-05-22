@@ -11,7 +11,15 @@ def main():
     output_csv_summary = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary.csv'
     output_csv_stats = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_stats.csv'
     output_csv_reasons = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_reasons.csv'
-    
+    output_csv_daily = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_summary_errors_by_date.csv'
+
+    # Chart PNG outputs (saved to Downloads)
+    output_png_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_jaotus.png'
+    output_png_hourly = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemid_tundide_kaupa.png'
+    output_png_timeline = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_taitmine_ajateljel.png'
+    output_png_daily_timeline = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemid_paevade_kaupa.png'
+    output_png_daily_pie = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_chart_probleemide_osakaalud.png'
+
     # Separate CSV files for each specific problem category
     output_csv_soc_korge = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_liiga_korge.csv'
     output_csv_soc_madal = '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_soc_liiga_madal.csv'
@@ -179,6 +187,27 @@ def main():
     print(f"Writing reasons to CSV: {output_csv_reasons}...")
     summary_df.to_csv(output_csv_reasons, index=True)
 
+    # --- Daily error breakdown ---
+    print("Generating daily error breakdown...")
+    df['Kuupäev'] = pd.to_datetime(df['Time']).dt.date
+    daily_groups = df.groupby('Kuupäev')
+
+    daily_df = pd.DataFrame()
+    daily_df['SOC liiga kõrge'] = daily_groups['Põhjus'].apply(lambda s: (s == 'SOC liiga kõrge').sum())
+    daily_df['SOC liiga madal'] = daily_groups['Põhjus'].apply(lambda s: (s == 'SOC liiga madal').sum())
+    daily_df['Võrgupiirang'] = daily_groups['Põhjus'].apply(lambda s: (s == 'Võrgupiirang').sum())
+    daily_df['Viga - uurimist vajav'] = daily_groups['Põhjus'].apply(lambda s: (s == 'Viga - uurimist vajav').sum())
+    daily_df['Vigade koguarv'] = daily_df.sum(axis=1)
+    daily_df['Ridade arv'] = daily_groups['Põhjus'].count()
+
+    # Error percentages out of total errors per day
+    for col in ['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']:
+        daily_df[col + ' (%)'] = (daily_df[col] / daily_df['Vigade koguarv'].replace(0, np.nan) * 100).round(2)
+
+    daily_df.index.name = 'Kuupäev'
+    print(f"Writing daily error summary to CSV: {output_csv_daily}...")
+    daily_df.reset_index().to_csv(output_csv_daily, index=False)
+
     # --- Clean up obsolete files ---
     obsolete_files = [
         '/Users/user/Downloads/raw_telemetry_2ccf67f82f80_analyzed.xlsx',
@@ -204,41 +233,36 @@ def main():
     print("Generating visualizations...")
     charts_dir = '/Users/user/.gemini/antigravity-ide/scratch'
     os.makedirs(charts_dir, exist_ok=True)
-    
-    # 1. Pie Chart - only 4 core errors, percentages from error total
+    error_colors = ['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6']
+
+    def save_chart(fig_path_scratch, fig_path_downloads):
+        plt.savefig(fig_path_scratch, dpi=150)
+        plt.savefig(fig_path_downloads, dpi=150)
+        plt.close()
+
+    # 1. Pie Chart - 4 core errors, % from error total
     plt.figure(figsize=(10, 8))
-    colors_pie = ['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6']
-    error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=colors_pie)
+    error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=140, colors=error_colors)
     plt.title('Probleemide jaotus (aprill 2026)', fontsize=14, fontweight='bold')
     plt.ylabel('')
     plt.tight_layout()
-    pie_path = os.path.join(charts_dir, 'reason_distribution.png')
-    plt.savefig(pie_path, dpi=150)
-    plt.close()
+    save_chart(os.path.join(charts_dir, 'reason_distribution.png'), output_png_pie)
 
-    # 2. Bar Chart - only 4 core errors by hour
+    # 2. Bar Chart - 4 core errors by hour of day
     plt.figure(figsize=(12, 6))
     hourly_problems = hourly_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
-    hourly_problems.plot(
-        kind='bar',
-        stacked=True,
-        color=['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6'],
-        ax=plt.gca()
-    )
+    hourly_problems.plot(kind='bar', stacked=True, color=error_colors, ax=plt.gca())
     plt.title('Probleemide esinemine tundide lõikes (aprill 2026)', fontsize=14, fontweight='bold')
     plt.xlabel('Tund (0-23)', fontsize=12)
     plt.ylabel('Probleemide arv', fontsize=12)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     plt.legend(title='Probleemi tüüp')
     plt.tight_layout()
-    bar_path = os.path.join(charts_dir, 'problems_by_hour.png')
-    plt.savefig(bar_path, dpi=150)
-    plt.close()
+    save_chart(os.path.join(charts_dir, 'problems_by_hour.png'), output_png_hourly)
 
-    # 3. Timeline Chart
+    # 3. Execution % Timeline
     df['Time_dt'] = time_dt_series
     hourly_ts = df.set_index('Time_dt').resample('h')['Täitmise %'].mean()
-    
     plt.figure(figsize=(14, 6))
     plt.plot(hourly_ts.index, hourly_ts.values, label='Keskmine täitmise % (tunnipõhine)', color='#1abc9c', linewidth=1.5)
     plt.axhline(95, color='#2ecc71', linestyle='--', label='Sihtväärtus (95%)', alpha=0.8)
@@ -248,9 +272,29 @@ def main():
     plt.legend(loc='lower left')
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.tight_layout()
-    timeline_path = os.path.join(charts_dir, 'execution_timeline.png')
-    plt.savefig(timeline_path, dpi=150)
-    plt.close()
+    save_chart(os.path.join(charts_dir, 'execution_timeline.png'), output_png_timeline)
+
+    # 4. Daily error timeline (päevade kaupa, 4 viga ajateljel)
+    daily_plot = daily_df[['SOC liiga kõrge', 'SOC liiga madal', 'Võrgupiirang', 'Viga - uurimist vajav']]
+    plt.figure(figsize=(14, 6))
+    for col, color in zip(daily_plot.columns, error_colors):
+        plt.plot(daily_df.index, daily_df[col], label=col, color=color, linewidth=2, marker='o', markersize=4)
+    plt.title('Probleemide esinemine päevade lõikes (aprill 2026)', fontsize=14, fontweight='bold')
+    plt.xlabel('Kuupäev', fontsize=12)
+    plt.ylabel('Probleemide arv', fontsize=12)
+    plt.legend(title='Probleemi tüüp')
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    save_chart(os.path.join(charts_dir, 'problems_by_day.png'), output_png_daily_timeline)
+
+    # 5. Overall error share pie chart (% of total error rows)
+    plt.figure(figsize=(10, 8))
+    error_counts.plot(kind='pie', autopct='%1.1f%%', startangle=90, colors=error_colors,
+                      wedgeprops=dict(edgecolor='white', linewidth=2))
+    plt.title('Probleemide osakaalud kogu perioodi lõikes (aprill 2026)', fontsize=14, fontweight='bold')
+    plt.ylabel('')
+    plt.tight_layout()
+    save_chart(os.path.join(charts_dir, 'error_share_pie.png'), output_png_daily_pie)
     
     print("\n--- ANALYSIS COMPLETED ---")
     print(stats_df.to_string(index=False))
